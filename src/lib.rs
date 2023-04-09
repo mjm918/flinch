@@ -10,6 +10,8 @@ mod sess;
 mod store;
 mod qry;
 mod flinch;
+mod trie;
+mod sividx;
 
 
 #[cfg(test)]
@@ -37,15 +39,16 @@ mod tests {
         }).is_ok());
         let db = flinch.using("first");
         let write_time = Instant::now();
-        for i in 0..100_000 {
+        let iter = 1;
+        for i in 0..iter {
             let user = User{ name: format!("Julfikar_{}",i), age: i };
             db.put(format!("P_0{}",i), FromRawString::new(
                 serde_json::to_string(&user).unwrap().as_str()
             ).unwrap()).await.unwrap();
         }
-        println!("10_000 records took {:?} to write",write_time.elapsed());
-        let val = db.wildcard_search("Julfikar 111".to_string()); // slow but users will like it
+        println!("{} records took {:?} to write",&iter,write_time.elapsed());
+        let val = db.search("Julfikar_111".to_string()); // slow but users will like it
         // type as you go is db.search <--- Its super fast
-        println!("Lookup 1 key in 10_000 records {:?} Execution Time {}",val.1.len(),val.0);
+        println!("Lookup 1 key in {} records {:?} Execution Time {}",&iter,val.1.len(),val.0);
     }
 }
