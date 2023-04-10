@@ -82,11 +82,11 @@ where K: Serialize +
         self.kv.remove(&view);
     }
 
-    pub fn seek(&self, clip: &str) -> Option<Ref<String, DashSet<K>>> {
+    pub fn get(&self, clip: &str) -> Option<Ref<String, DashSet<K>>> {
         self.kv.get(clip)
     }
 
-    pub fn seek_view(&self, vw: &str) -> Option<Ref<String, DashSet<K>>> {
+    pub fn get_view(&self, vw: &str) -> Option<Ref<String, DashSet<K>>> {
         self.kv.get(&set_view_name(vw))
     }
 

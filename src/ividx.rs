@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::sync::{Arc, Mutex};
-use rayon::prelude::*;
+use std::sync::{Arc};
 
 use dashmap::{DashMap, DashSet};
 use tokio::task::JoinHandle;
@@ -29,7 +28,7 @@ impl<K> IvIdx<K>
 
     pub fn put(&self, k: K, v: String) -> JoinHandle<()> {
         let rf = self.kv.clone();
-        tokio::spawn(async move {
+        tokio::task::spawn(async move {
             for w in v.split_whitespace() {
                 let token = w.to_lowercase();
                 let key = &k;
@@ -83,25 +82,25 @@ impl<K> IvIdx<K>
     }
 
     pub fn w_find(&self, words: Vec<&str>) -> Vec<K> {
-        let res = Arc::new(Mutex::new(HashSet::new()));
-        words.par_iter().for_each(|w|{
-            let token = w.to_lowercase();
-            for kv in self.kv.iter() {
-                let pair = kv.pair();
-                if pair.0.contains(&token) {
-                    let dk = pair.1.iter().map(|r|{
-                       return r.key().to_owned();
-                    }).collect::<Vec<K>>();
-                    if dk.len() > 0 {
-                        for k in dk {
-                            if res.lock().unwrap().get(&k).is_none() {
-                                res.lock().unwrap().insert(k);
-                            }
-                        }
+        let mut res = HashSet::new();
+        for kv in self.kv.iter() {
+            let key = kv.key();
+            let mut counter = 0;
+            for word in words.iter() {
+                let token = word.to_lowercase();
+                if key.contains(token.as_str()) {
+                    counter += 1;
+                }
+            }
+            if counter >= words.len() {
+                let dk = kv.value().iter().map(|r|r.key().to_owned()).collect::<Vec<K>>();
+                for k in dk {
+                    if res.get(&k).is_none() {
+                        res.insert(k);
                     }
                 }
             }
-        });
-        let x = res.lock().unwrap().clone().into_iter().collect::<Vec<K>>(); x
+        }
+        res.into_iter().collect()
     }
 }

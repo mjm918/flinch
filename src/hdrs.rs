@@ -40,20 +40,11 @@ pub enum Event<K, D> {
     Query(Query<K, D>),
     Subscribed(Sender<Event<K, D>>),
 }
-#[derive(Debug)]
-pub enum DbRes {
-    End,
-    Err(String),
-    Duplicate,
-}
+
 #[derive(Debug)]
 pub enum SessionRes {
     Closed,
     Timeout,
-    Full,
-    NoResponse,
-    DataStoreNotFound,
-    UnImplement,
     Err(String),
 }
 

@@ -26,9 +26,9 @@ pub enum WatcherError {
 }
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug)]
-pub enum StoreError {
-    #[error("store already exists")]
-    DuplicateStore,
-    #[error("no such store")]
-    NoSuchStore
+pub enum CollectionError {
+    #[error("collection already exists")]
+    DuplicateCollection,
+    #[error("no such collection")]
+    NoSuchCollection
 }

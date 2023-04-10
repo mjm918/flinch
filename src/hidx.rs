@@ -50,7 +50,7 @@ impl<K> HIdx<K>
         });
     }
 
-    pub fn seek(&self, idx: &str) -> Option<Ref<String, K>> {
+    pub fn get(&self, idx: &str) -> Option<Ref<String, K>> {
         self.kv.get(idx)
     }
 
