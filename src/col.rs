@@ -11,19 +11,19 @@ use crate::clips::Clips;
 use crate::doc::Document;
 use crate::flinch::CollectionOptions;
 use crate::hdrs::{Event, ExecTime, Query, SessionRes};
-use crate::hidx::HIdx;
-use crate::ividx::IvIdx;
+use crate::hidx::HashIndex;
+use crate::ividx::InvertedIndex;
 use crate::range::Range;
 use crate::sess::Session;
-use crate::wtch::Wtch;
+use crate::wtch::Watchman;
 
 pub struct Collection<K, D: Document> {
     kv: DashMap<K, D>,
-    hidx: HIdx<K>,
-    ividx: IvIdx<K>,
+    hash_idx: HashIndex<K>,
+    inverted_idx: InvertedIndex<K>,
     clips: Clips<K>,
     range: Range<K>,
-    watcher: Session<Event<K, D>>,
+    watchman: Session<Event<K, D>>,
     opts: CollectionOptions
 }
 pub type ExecutionTime = String;
@@ -45,18 +45,18 @@ where K: Serialize
     pub fn new(opts: CollectionOptions) -> Self {
         Self{
             kv: DashMap::new(),
-            hidx: HIdx::new(),
-            ividx: IvIdx::new(),
+            hash_idx: HashIndex::new(),
+            inverted_idx: InvertedIndex::new(),
             clips: Clips::new(),
             range: Range::new(),
-            watcher: Wtch::<Event<K, D>>::new(vec![]).unwrap().start(),
+            watchman: Watchman::<Event<K, D>>::new(vec![]).unwrap().start(),
             opts
         }
     }
 
     pub async fn sub(&self, sx: Sender<Event<K,D>>) -> Result<(), SessionRes> {
-        let _ = self.watcher.notify(Event::Subscribed(sx.clone())).await;
-        self.watcher.reg(sx).await
+        let _ = self.watchman.notify(Event::Subscribed(sx.clone())).await;
+        self.watchman.reg(sx).await
     }
 
     pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, SessionRes> {
@@ -65,16 +65,16 @@ where K: Serialize
         v.set_opts(&self.opts);
 
         let query = Query::Insert(k.clone(), v.clone());
-        let _ = self.watcher.notify(Event::Query(query)).await;
+        let _ = self.watchman.notify(Event::Query(query)).await;
 
-        if let Err(err) = self.hidx.put(&k, &v) {
+        if let Err(err) = self.hash_idx.put(&k, &v) {
             return Err(SessionRes::Err(err.to_string()));
         }
         if let Some(vw) = v.binding() {
             self.clips.put_view(&vw, &k);
         }
         if let Some(val) = v.content() {
-            let _ = self.ividx.put(k.clone(), val).await;
+            let _ = self.inverted_idx.put(k.clone(), val).await;
         }
         self.clips.put(&k, &v);
         self.range.put(&k, &v);
@@ -88,14 +88,14 @@ where K: Serialize
         if self.kv.contains_key(&k) {
             let (_, v) = self.kv.remove(&k).unwrap();
             let query = Query::<K,D>::Remove(k.clone());
-            let _ = self.watcher.notify(Event::Query(query)).await;
+            let _ = self.watchman.notify(Event::Query(query)).await;
 
-            self.hidx.delete(&v.clone());
+            self.hash_idx.delete(&v.clone());
             if let Some(view) = v.binding() {
                 self.clips.delete_inner(&view, &k)
             }
             if let Some(content) = v.content() {
-                let _ = self.ividx.delete(k.clone(), content).await;
+                let _ = self.inverted_idx.delete(k.clone(), content).await;
             }
             self.clips.delete(&k, &v);
         }
@@ -149,7 +149,7 @@ where K: Serialize
 
     pub fn get_idx(&self, idx: &str) -> (ExecutionTime, Option<Ref<K, D>>) {
         let exec = ExecTime::new();
-        let res = match self.hidx.get(idx) {
+        let res = match self.hash_idx.get(idx) {
             None => None,
             Some(v) => {
                 self.kv.get(v.value())
@@ -195,7 +195,7 @@ where K: Serialize
     pub fn search(&self, text: String) -> (ExecutionTime, Vec<Ref<K, D>>) {
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
-        let keys = self.ividx.find(words);
+        let keys = self.inverted_idx.find(words);
         let mut res = Vec::with_capacity(keys.len());
         for key in keys {
             if let Some(kv) = self.kv.get(&key) {
@@ -208,7 +208,7 @@ where K: Serialize
     pub fn wildcard_search(&self, text: String) -> (ExecutionTime, Vec<Ref<K, D>>) {
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
-        let keys = self.ividx.w_find(words);
+        let keys = self.inverted_idx.w_find(words);
         let mut res = Vec::with_capacity(keys.len());
         for key in keys {
             if let Some(kv) = self.kv.get(&key) {
@@ -223,7 +223,7 @@ where K: Serialize
     }
 
     pub fn iter_index(&self) -> Iter<'_, String, K> {
-        self.hidx.iter()
+        self.hash_idx.iter()
     }
 
     pub fn iter_clips(&self) -> Iter<String, DashSet<K>> {

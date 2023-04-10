@@ -1,5 +1,4 @@
 mod hidx;
-mod doc;
 mod ividx;
 mod range;
 mod clips;
@@ -7,17 +6,19 @@ mod err;
 mod hdrs;
 mod wtch;
 mod sess;
-mod col;
 mod qry;
-mod flinch;
-
+pub mod flinch;
+pub mod doc;
+pub mod col;
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::{Instant};
     use serde::{Deserialize, Serialize};
+    use tokio::sync::mpsc::channel;
     use crate::doc::{Document, FromRawString, ViewConfig};
     use crate::flinch::{Flinch, CollectionOptions};
+    use crate::hdrs::{Event, Query};
 
     #[tokio::test]
     async fn it_works() {
@@ -42,8 +43,9 @@ mod tests {
         }).is_ok());
 
         let col = flinch.using::<String, FromRawString>("demo.collection").unwrap();
+
         let write_time = Instant::now();
-        let iter = 100_000;
+        let iter = 500;
         for i in 0..iter {
             let user = User{ name: format!("Julfikar{}",i), age: i };
             col.put(format!("P_0{}", i), FromRawString::new(
@@ -52,7 +54,7 @@ mod tests {
         }
         println!("{} records took {:?} to write",&iter,write_time.elapsed());
 
-        let val = col.search("1".to_string());
+        let val = col.search("Julfikar1".to_string());
         println!("Lookup 1 key in {} records . Found {:?} result(s) Execution Time {}",&iter,val.1.len(),val.0);
 
         println!("Total number of records {}", col.len());
@@ -67,9 +69,9 @@ mod tests {
         col.put(last_inserted_id.clone(),FromRawString::new(
             serde_json::to_string(&User { name: format!("Julfikar{}",123123), age: 123123 }).unwrap().as_str()
         ).unwrap()).await.unwrap();
-        println!("last inserted id {} single execution", last_inserted_id);
+        println!("Last inserted id {} single execution", last_inserted_id);
 
         let vw = col.fetch_view("ME");
-        println!("fetch view {:?}", serde_json::to_string(&vw.1));
+        println!("Fetch view {:?}", serde_json::to_string(&vw.1));
     }
 }

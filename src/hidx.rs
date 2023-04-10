@@ -10,11 +10,11 @@ use serde::Serialize;
 use crate::doc::Document;
 use crate::err::IndexError;
 
-pub struct HIdx<K> {
+pub struct HashIndex<K> {
     pub kv: DashMap<String, K>,
 }
 
-impl<K> HIdx<K>
+impl<K> HashIndex<K>
     where K: Serialize +
     DeserializeOwned +
     PartialOrd +

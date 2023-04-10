@@ -40,5 +40,4 @@ impl<M> Session<M> where M: Send + 'static
             }
         }
     }
-
 }

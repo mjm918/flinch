@@ -5,11 +5,11 @@ use std::sync::{Arc};
 use dashmap::{DashMap, DashSet};
 use tokio::task::JoinHandle;
 
-pub struct IvIdx<K> {
+pub struct InvertedIndex<K> {
     pub kv: Arc<DashMap<String, DashSet<K>>>
 }
 
-impl<K> IvIdx<K>
+impl<K> InvertedIndex<K>
     where K: PartialOrd
     +  Ord
     +  PartialEq

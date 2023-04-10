@@ -4,12 +4,12 @@ use crate::err::WatcherError;
 use crate::hdrs::{DestinationDown, Request, WatcherState};
 use crate::sess::Session;
 
-pub struct Wtch<M> {
+pub struct Watchman<M> {
     idx: usize,
     chans: Vec<Sender<M>>
 }
 
-impl<M> Wtch<M> where M: Clone + Send + 'static {
+impl<M> Watchman<M> where M: Clone + Send + 'static {
     pub fn new(chans: Vec<Sender<M>>) -> Result<Self, WatcherError> {
         if let Err(err) = Self::multi_chk(&chans) {
             return Err(err);

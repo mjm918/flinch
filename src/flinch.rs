@@ -2,8 +2,6 @@ use anyhow::Result;
 use std::hash::Hash;
 use anymap::AnyMap;
 use chrono::{DateTime, Local};
-use dashmap::DashMap;
-use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
 use serde::{Serialize};
 use crate::doc::{Document, ViewConfig};
