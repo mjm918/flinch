@@ -9,7 +9,7 @@ use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 use crate::clips::Clips;
 use crate::doc::Document;
-use crate::flinch::CollectionOptions;
+use crate::db::CollectionOptions;
 use crate::hdrs::{Event, ExecTime, Query, SessionRes};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;

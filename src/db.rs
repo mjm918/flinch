@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::hash::Hash;
-use anymap::AnyMap;
+use anymap2::SendSyncAnyMap as AnyMap;
 use chrono::{DateTime, Local};
 use serde::de::DeserializeOwned;
 use serde::{Serialize};
@@ -24,11 +24,11 @@ pub struct Storage <K, D> where D: Document {
     pub created_by: Option<String>
 }
 
-pub struct Flinch {
+pub struct Database {
     storage: AnyMap
 }
 
-impl Flinch {
+impl Database {
     pub fn init() -> Self {
         Self {
             storage: AnyMap::new()
@@ -46,7 +46,7 @@ impl Flinch {
         + Send
         + Sync
         + 'static,
-              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document {
+              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync {
         if let Err(err) = self.store_exists::<K, D>(opts.name.as_str()) {
             return Err(err);
         }
@@ -71,7 +71,7 @@ impl Flinch {
         + Send
         + Sync
         + 'static,
-              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document {
+              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync {
         if let Some(col) = self.storage.get::<Storage<K, D>>() {
             if col.name.as_str().eq(name) {
                 return Ok(&col.store);
@@ -92,7 +92,7 @@ impl Flinch {
         + Send
         + Sync
         + 'static,
-              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document{
+              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync {
         if let Some(col) = self.storage.get::<Storage<K, D>>() {
             if col.name.as_str().eq(name) {
                 return Err(CollectionError::DuplicateCollection);

@@ -7,17 +7,18 @@ mod hdrs;
 mod wtch;
 mod sess;
 mod qry;
-pub mod flinch;
 pub mod doc;
 pub mod col;
+pub mod db;
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::{Instant};
     use serde::{Deserialize, Serialize};
     use tokio::sync::mpsc::channel;
     use crate::doc::{Document, FromRawString, ViewConfig};
-    use crate::flinch::{Flinch, CollectionOptions};
+    use crate::db::{Database, CollectionOptions};
     use crate::hdrs::{Event, Query};
 
     #[tokio::test]
@@ -27,9 +28,9 @@ mod tests {
             name: String,
             age: i64
         }
-        let mut flinch = Flinch::init();
+        let mut db = Database::init();
 
-        assert!(flinch.create::<String, FromRawString>(CollectionOptions {
+        assert!(db.create::<String, FromRawString>( CollectionOptions{
             name: "demo.collection".to_string(),
             index_opts: vec![],
             search_opts: vec![ "name".to_string() ],
@@ -42,7 +43,7 @@ mod tests {
             clips_opts: vec![],
         }).is_ok());
 
-        let col = flinch.using::<String, FromRawString>("demo.collection").unwrap();
+        let col = db.using::<String, FromRawString>("demo.collection").unwrap();
 
         let write_time = Instant::now();
         let iter = 500;

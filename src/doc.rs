@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::err::DocumentError;
-use crate::flinch::CollectionOptions;
+use crate::db::CollectionOptions;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Field {
