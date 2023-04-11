@@ -20,8 +20,7 @@ pub struct CollectionOptions {
 pub struct Storage <K, D> where D: Document {
     pub name: String,
     pub store: Collection<K, D>,
-    pub created_at: DateTime<Local>,
-    pub created_by: Option<String>
+    pub created_at: DateTime<Local>
 }
 
 pub struct Database {
@@ -53,8 +52,7 @@ impl Database {
         self.storage.insert(Storage{
             name: opts.name.clone(),
             store: Collection::<K, D>::new(opts),
-            created_at: Local::now(),
-            created_by: None,
+            created_at: Local::now()
         });
         Ok(())
     }
