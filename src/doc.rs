@@ -58,7 +58,18 @@ pub struct FromRawString {
 impl Index for FromRawString {
     fn keys(&self) -> Vec<String> {
         if self.keys.is_some() {
-            self.keys.clone().unwrap()
+            let mut indexes = vec![];
+            for key in self.keys.clone().unwrap() {
+                if self.raw.contains_key(&key) {
+                    let v = self.raw.get(&key)
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    indexes.push(v);
+                }
+            }
+            indexes
         } else {
             vec![]
         }

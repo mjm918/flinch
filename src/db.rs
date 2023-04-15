@@ -1,7 +1,8 @@
 use anyhow::Result;
 use std::hash::Hash;
-use anymap2::SendSyncAnyMap as AnyMap;
 use chrono::{DateTime, Local};
+use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
 use serde::{Serialize};
 use crate::doc::{Document, ViewConfig};
@@ -19,82 +20,55 @@ pub struct CollectionOptions {
 
 pub struct Storage <K, D> where D: Document {
     pub name: String,
-    pub store: Collection<K, D>,
+    pub collection: Collection<K, D>,
     pub created_at: DateTime<Local>
 }
 
-pub struct Database {
-    storage: AnyMap
+pub struct Database<K, D> where D: Document {
+    storage: DashMap<String, Storage<K, D>>
 }
 
-impl Database {
+impl<K, D> Database<K,D>
+    where K: Serialize
+    + DeserializeOwned
+    + PartialOrd
+    + Ord
+    + PartialEq
+    + Eq
+    + Hash
+    + Clone
+    + Send
+    + Sync
+    + 'static,
+          D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync
+{
     pub fn init() -> Self {
         Self {
-            storage: AnyMap::new()
+            storage: DashMap::new()
         }
     }
-    pub fn create<K, D>(&mut self, opts: CollectionOptions) -> Result<(), CollectionError>
-        where K: Serialize
-        + DeserializeOwned
-        + PartialOrd
-        + Ord
-        + PartialEq
-        + Eq
-        + Hash
-        + Clone
-        + Send
-        + Sync
-        + 'static,
-              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync {
-        if let Err(err) = self.store_exists::<K, D>(opts.name.as_str()) {
+    pub fn create(&mut self, opts: CollectionOptions) -> Result<(), CollectionError> {
+        if let Err(err) = self.store_exists(opts.name.as_str()) {
             return Err(err);
         }
-        self.storage.insert(Storage{
+        self.storage.insert(opts.name.clone(), Storage {
             name: opts.name.clone(),
-            store: Collection::<K, D>::new(opts),
+            collection: Collection::<K, D>::new(opts),
             created_at: Local::now()
         });
         Ok(())
     }
 
-    pub fn using<K, D>(&self, name: &str) -> Result<&Collection<K, D>, CollectionError>
-        where K: Serialize
-        + DeserializeOwned
-        + PartialOrd
-        + Ord
-        + PartialEq
-        + Eq
-        + Hash
-        + Clone
-        + Send
-        + Sync
-        + 'static,
-              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync {
-        if let Some(col) = self.storage.get::<Storage<K, D>>() {
-            if col.name.as_str().eq(name) {
-                return Ok(&col.store);
-            }
+    pub fn using(&self, name: &str) -> Result<Ref<String, Storage<K, D>>, CollectionError> {
+        if let Some(col) = self.storage.get(name) {
+            return Ok(col);
         }
         Err(CollectionError::NoSuchCollection)
     }
 
-    fn store_exists<K,D>(&self, name: &str) -> Result<(), CollectionError>
-        where K: Serialize
-        + DeserializeOwned
-        + PartialOrd
-        + Ord
-        + PartialEq
-        + Eq
-        + Hash
-        + Clone
-        + Send
-        + Sync
-        + 'static,
-              D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync {
-        if let Some(col) = self.storage.get::<Storage<K, D>>() {
-            if col.name.as_str().eq(name) {
-                return Err(CollectionError::DuplicateCollection);
-            }
+    fn store_exists(&self, name: &str) -> Result<(), CollectionError> {
+        if let Some(col) = self.storage.get(name) {
+            return Err(CollectionError::DuplicateCollection);
         }
         Ok(())
     }

@@ -93,4 +93,8 @@ where K: Serialize +
     pub fn iter(&self) -> Iter<String, DashSet<K>> {
         self.kv.iter()
     }
+
+    pub fn clear(&self) {
+        self.kv.clear();
+    }
 }

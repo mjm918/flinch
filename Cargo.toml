@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.70"
-anymap2 = "0.13.0"
 tokio = { version="1.27.0", features=["full"] }
 dashmap = "5.4.0"
 rayon = "1.7.0"

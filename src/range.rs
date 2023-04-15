@@ -83,4 +83,8 @@ impl<K> Range<K>
             }
         }.into_iter().collect::<Vec<K>>()
     }
+
+    pub fn clear(&self) {
+        self.tree.clear();
+    }
 }

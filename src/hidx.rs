@@ -57,4 +57,8 @@ impl<K> HashIndex<K>
     pub fn iter(&self) -> Iter<String, K> {
         self.kv.iter()
     }
+
+    pub fn clear(&self) {
+        self.kv.clear();
+    }
 }

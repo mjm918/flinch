@@ -103,4 +103,8 @@ impl<K> InvertedIndex<K>
         }
         res.into_iter().collect()
     }
+
+    pub fn clear(&self) {
+        self.kv.clear();
+    }
 }

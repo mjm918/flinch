@@ -237,4 +237,12 @@ where K: Serialize
     pub fn id(&self) -> String {
         Uuid::new_v4().as_hyphenated().to_string()
     }
+
+    pub fn drop(&self) {
+        self.hash_idx.clear();
+        self.inverted_idx.clear();
+        self.range.clear();
+        self.clips.clear();
+        self.kv.clear();
+    }
 }
