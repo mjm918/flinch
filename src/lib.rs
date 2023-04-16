@@ -31,7 +31,7 @@ mod tests {
         let mut db = Database::<String, FromRawString>::init();
 
         assert!(db.create( CollectionOptions{
-            name: "demo.collection".to_string(),
+            name: "demo".to_string(),
             index_opts: vec![ "name".to_string() ],
             search_opts: vec![ "name".to_string() ],
             view_opts: vec![ ViewConfig{
@@ -43,9 +43,9 @@ mod tests {
             clips_opts: vec![],
         }).is_ok());
 
-        let store = db.using("demo.collection").unwrap();
+        let store = db.using("demo").unwrap();
         let write_time = Instant::now();
-        let iter = 500;
+        let iter = 100_000;
         for i in 0..iter {
             let user = User{ name: format!("Julfikar{}",i), age: i };
             store.collection.put(format!("P_0{}", i), FromRawString::new(

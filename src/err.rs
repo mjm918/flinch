@@ -32,3 +32,11 @@ pub enum CollectionError {
     #[error("no such collection")]
     NoSuchCollection
 }
+
+#[derive(Serialize, Deserialize, Error, Clone, Debug)]
+pub enum QueryError {
+    #[error("query expression error `{0}`")]
+    ParseError(String),
+    #[error("process error `{0}`")]
+    ProcessError(String)
+}

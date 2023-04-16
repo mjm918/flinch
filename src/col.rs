@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
+use crate::err::QueryError;
 use crate::hdrs::{Event, ExecTime, Query, SessionRes};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;
@@ -205,7 +206,7 @@ where K: Serialize
         (exec.done(), res)
     }
 
-    pub fn wildcard_search(&self, text: String) -> (ExecutionTime, Vec<Ref<K, D>>) {
+    pub fn like_search(&self, text: String) -> (ExecutionTime, Vec<Ref<K, D>>) {
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.w_find(words);
