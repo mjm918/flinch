@@ -6,10 +6,12 @@ mod err;
 mod hdrs;
 mod wtch;
 mod sess;
-mod qry;
+mod act;
 pub mod doc;
 pub mod col;
 pub mod db;
+mod qry;
+mod utils;
 
 #[cfg(test)]
 mod tests {
@@ -19,7 +21,7 @@ mod tests {
     use tokio::sync::mpsc::channel;
     use crate::doc::{Document, FromRawString, ViewConfig};
     use crate::db::{Database, CollectionOptions};
-    use crate::hdrs::{Event, Query};
+    use crate::hdrs::{Event, ActionType};
 
     #[tokio::test]
     async fn it_works() {
@@ -45,9 +47,9 @@ mod tests {
 
         let store = db.using("demo").unwrap();
         let write_time = Instant::now();
-        let iter = 100_000;
+        let iter = 500_000;
         for i in 0..iter {
-            let user = User{ name: format!("Julfikar{}",i), age: i };
+            let user = User{ name: format!("Julfikar{}",i * 199), age: i };
             store.collection.put(format!("P_0{}", i), FromRawString::new(
                 serde_json::to_string(&user).unwrap().as_str()
             ).unwrap()).await.unwrap();
@@ -73,5 +75,10 @@ mod tests {
 
         let vw = store.collection.fetch_view("ME");
         println!("Fetch view {:?}", serde_json::to_string(&vw.1));
+
+
+        let qt = Instant::now();
+        let res = store.collection.query(r#"/age"#);
+        println!("{:?} {}", qt.elapsed(), res.unwrap().len());
     }
 }

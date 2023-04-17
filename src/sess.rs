@@ -1,6 +1,7 @@
 use tokio::sync::mpsc::error::SendTimeoutError;
 use tokio::sync::mpsc::Sender;
-use crate::hdrs::{Request, SessionRes, TIMEOUT};
+use crate::hdrs::{Request, SessionRes};
+use crate::utils::TIMEOUT;
 
 #[derive(Clone, Debug)]
 pub struct Session<M> {

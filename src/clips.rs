@@ -5,7 +5,7 @@ use dashmap::mapref::one::{Ref};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use crate::doc::Document;
-use crate::hdrs::set_view_name;
+use crate::utils::set_view_name;
 
 pub struct Clips<K> {
     pub kv: DashMap<String, DashSet<K>>

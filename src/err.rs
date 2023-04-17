@@ -37,6 +37,6 @@ pub enum CollectionError {
 pub enum QueryError {
     #[error("query expression error `{0}`")]
     ParseError(String),
-    #[error("process error `{0}`")]
-    ProcessError(String)
+    #[error("no result found")]
+    NoResult
 }

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-use crate::err::DocumentError;
+use crate::err::{DocumentError, QueryError};
 use crate::db::CollectionOptions;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -43,25 +43,28 @@ pub trait DocumentSearch {
 pub trait Document: Index + Clips + Range + View + DocumentSearch {
     fn new(input: &str) -> Result<Self, DocumentError> where Self: Sized;
     fn set_opts(&mut self, opts: &CollectionOptions);
+    fn object(&self) -> &Map<String, Value>;
+    fn document(&self) -> &Value;
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FromRawString {
-    pub raw: HashMap<String, Value>,
-    pub keys: Option<Vec<String>>,
-    pub tokens: Option<Vec<String>>,
-    pub fields: Option<Vec<String>>,
-    pub view_cfg: Vec<ViewConfig>,
-    pub content: Option<Vec<String>>
+    pub data: Value,
+    keys: Option<Vec<String>>,
+    tokens: Option<Vec<String>>,
+    fields: Option<Vec<String>>,
+    view_cfg: Vec<ViewConfig>,
+    content: Option<Vec<String>>
 }
 
 impl Index for FromRawString {
     fn keys(&self) -> Vec<String> {
         if self.keys.is_some() {
+            let obj = self.object();
             let mut indexes = vec![];
             for key in self.keys.clone().unwrap() {
-                if self.raw.contains_key(&key) {
-                    let v = self.raw.get(&key)
+                if obj.contains_key(&key) {
+                    let v = obj.get(&key)
                         .unwrap()
                         .as_str()
                         .unwrap()
@@ -79,10 +82,11 @@ impl Index for FromRawString {
 impl Clips for FromRawString {
     fn tokens(&self) -> Vec<String> {
         if self.tokens.is_some() {
+            let obj = self.object();
             let mut tokens = vec![];
             for token in self.tokens.clone().unwrap() {
-                if self.raw.contains_key(&token) {
-                    let v = self.raw.get(&token)
+                if obj.contains_key(&token) {
+                    let v = obj.get(&token)
                             .unwrap()
                             .as_str()
                             .unwrap()
@@ -100,15 +104,16 @@ impl Clips for FromRawString {
 impl Range for FromRawString {
     fn fields(&self) -> Vec<Field> {
         if self.fields.is_some() {
+            let obj = self.object();
             let mut rfields = vec![];
             let fields = self.fields.clone().unwrap();
             for field in fields {
                 let f = field.as_str();
-                if self.raw.contains_key(f.clone()) {
+                if obj.contains_key(f.clone()) {
                     rfields.push(
                         Field{
                                     key: f.clone().to_string(),
-                                    value: self.raw
+                                    value: obj
                                             .get(f.clone())
                                             .unwrap()
                                             .to_string()
@@ -126,10 +131,11 @@ impl Range for FromRawString {
 impl View for FromRawString {
     fn binding(&self) -> Option<String> {
         if self.view_cfg.len() > 0 {
+            let obj = self.object();
             let vw_cfg = self.view_cfg.clone();
             for cfg in vw_cfg {
-                if self.raw.contains_key(&cfg.prop) {
-                    let v = self.raw.get(&cfg.prop)
+                if obj.contains_key(&cfg.prop) {
+                    let v = obj.get(&cfg.prop)
                         .unwrap()
                         .to_string();
                     if v.eq(&cfg.expected) {
@@ -145,11 +151,12 @@ impl View for FromRawString {
 impl DocumentSearch for FromRawString {
     fn content(&self) -> Option<String> {
         if self.content.is_some() {
+            let obj = self.object();
             let content_fields = self.content.clone().unwrap();
             let mut content = String::from("");
             for content_field in content_fields {
-                if self.raw.contains_key(content_field.as_str()) {
-                    let res = self.raw.get(content_field.as_str());
+                if obj.contains_key(content_field.as_str()) {
+                    let res = obj.get(content_field.as_str());
                     if res.is_some() {
                         let t = res.unwrap().as_str().unwrap().to_string();
                         content.push_str(t.as_str());
@@ -173,13 +180,8 @@ impl Document for FromRawString {
         if !json.is_object() {
             return Err(DocumentError::NotAnObject);
         }
-        let mut raw_json = HashMap::new();
-        let map = json.as_object().unwrap();
-        for kv in map {
-            raw_json.insert(kv.0.clone(), kv.1.clone());
-        }
         Ok(Self {
-            raw: raw_json,
+            data: json,
             keys: None,
             tokens: None,
             fields: None,
@@ -200,5 +202,13 @@ impl Document for FromRawString {
         self.view_cfg = if !f { opts.view_opts.clone() } else { vec![] };
         self.fields = if !fl { Some(opts.range_opts.clone()) } else { None };
         self.content = if !c { Some(opts.search_opts.clone()) } else { None };
+    }
+
+    fn object(&self) -> &Map<String, Value> {
+        self.data.as_object().unwrap()
+    }
+
+    fn document(&self) -> &Value {
+        &self.data
     }
 }

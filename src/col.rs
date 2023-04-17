@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::hash::Hash;
 use dashmap::{DashMap, DashSet};
 use dashmap::iter::Iter;
+use dashmap::mapref::multiple::RefMulti;
 use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -11,11 +12,12 @@ use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
 use crate::err::QueryError;
-use crate::hdrs::{Event, ExecTime, Query, SessionRes};
+use crate::hdrs::{Event, ActionType, SessionRes};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;
 use crate::range::Range;
 use crate::sess::Session;
+use crate::utils::ExecTime;
 use crate::wtch::Watchman;
 
 pub struct Collection<K, D: Document> {
@@ -44,7 +46,7 @@ where K: Serialize
     D: Serialize + DeserializeOwned + Clone + Send + 'static + Document
 {
     pub fn new(opts: CollectionOptions) -> Self {
-        Self{
+        Self {
             kv: DashMap::new(),
             hash_idx: HashIndex::new(),
             inverted_idx: InvertedIndex::new(),
@@ -65,8 +67,8 @@ where K: Serialize
         let mut v = d;
         v.set_opts(&self.opts);
 
-        let query = Query::Insert(k.clone(), v.clone());
-        let _ = self.watchman.notify(Event::Query(query)).await;
+        let query = ActionType::Insert(k.clone(), v.clone());
+        let _ = self.watchman.notify(Event::Data(query)).await;
 
         if let Err(err) = self.hash_idx.put(&k, &v) {
             return Err(SessionRes::Err(err.to_string()));
@@ -88,8 +90,8 @@ where K: Serialize
         let exec = ExecTime::new();
         if self.kv.contains_key(&k) {
             let (_, v) = self.kv.remove(&k).unwrap();
-            let query = Query::<K,D>::Remove(k.clone());
-            let _ = self.watchman.notify(Event::Query(query)).await;
+            let query = ActionType::<K,D>::Remove(k.clone());
+            let _ = self.watchman.notify(Event::Data(query)).await;
 
             self.hash_idx.delete(&v.clone());
             if let Some(view) = v.binding() {
@@ -245,5 +247,16 @@ where K: Serialize
         self.range.clear();
         self.clips.clear();
         self.kv.clear();
+    }
+
+    pub fn query(&self, cmd: &str) -> Result<Vec<RefMulti<K, D>>, QueryError> {
+        let mut res = vec![];
+        for it in self.iter() {
+            let chk = it.value().document().pointer(cmd);
+            if chk.is_some() && chk.unwrap().as_i64().unwrap() < 10 {
+                res.push(it);
+            }
+        }
+        Ok(res)
     }
 }
