@@ -1,11 +1,14 @@
 use anyhow::Result;
 use std::hash::Hash;
+use crossbeam_queue::{ArrayQueue, SegQueue};
 use dashmap::{DashMap, DashSet};
-use dashmap::iter::Iter;
+use dashmap::rayon::map::Iter;
 use dashmap::mapref::multiple::RefMulti;
 use dashmap::mapref::one::Ref;
+use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 use crate::clips::Clips;
@@ -43,7 +46,7 @@ where K: Serialize
         + Send
         + Sync
         + 'static,
-    D: Serialize + DeserializeOwned + Clone + Send + 'static + Document
+    D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document
 {
     pub fn new(opts: CollectionOptions) -> Self {
         Self {
@@ -178,14 +181,14 @@ where K: Serialize
         (exec.done(), res)
     }
 
-    pub fn fetch_view(&self, view_name: &str) -> (ExecutionTime, Vec<(K, D)>) {
+    pub fn fetch_view(&self, view_name: &str) -> (ExecutionTime, Vec<(K, Value)>) {
         let exec = ExecTime::new();
         let res = match self.clips.get_view(view_name) {
             Some(v) => {
                 let mut res = Vec::with_capacity(v.value().len());
                 for k in v.value().iter() {
                     if let Some(kd) = self.kv.get(&k) {
-                        res.push((kd.key().clone(), kd.value().clone()));
+                        res.push((kd.key().clone(), kd.value().document().clone()));
                     }
                 }
                 res
@@ -195,7 +198,7 @@ where K: Serialize
         (exec.done(), res)
     }
 
-    pub fn search(&self, text: String) -> (ExecutionTime, Vec<Ref<K, D>>) {
+    pub fn search(&self, text: &String) -> (ExecutionTime, Vec<Ref<K, D>>) {
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.find(words);
@@ -208,21 +211,21 @@ where K: Serialize
         (exec.done(), res)
     }
 
-    pub fn like_search(&self, text: String) -> (ExecutionTime, Vec<Ref<K, D>>) {
+    pub fn like_search(&self, text: &String) -> (ExecutionTime, ArrayQueue<D>) {
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.w_find(words);
-        let mut res = Vec::with_capacity(keys.len());
-        for key in keys {
-            if let Some(kv) = self.kv.get(&key) {
-                res.push(kv);
+        let mut res = ArrayQueue::new(keys.len());
+        keys.par_iter().for_each(|key|{
+            if let Some(kv) = self.kv.get(key) {
+                let _ = res.push(kv.clone());
             }
-        }
+        });
         (exec.done(), res)
     }
 
     pub fn iter(&self) -> Iter<'_, K, D> {
-        self.kv.iter()
+        self.kv.par_iter()
     }
 
     pub fn iter_index(&self) -> Iter<'_, String, K> {
@@ -249,14 +252,12 @@ where K: Serialize
         self.kv.clear();
     }
 
-    pub fn query(&self, cmd: &str) -> Result<Vec<RefMulti<K, D>>, QueryError> {
-        let mut res = vec![];
-        for it in self.iter() {
+    pub fn query(&self, cmd: &str) -> Result<SegQueue<RefMulti<K, D>>, QueryError> {
+        let mut res = SegQueue::new();
+        self.iter().for_each(|it|{
             let chk = it.value().document().pointer(cmd);
-            if chk.is_some() && chk.unwrap().as_i64().unwrap() < 10 {
-                res.push(it);
-            }
-        }
+
+        });
         Ok(res)
     }
 }

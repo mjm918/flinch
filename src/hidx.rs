@@ -2,8 +2,9 @@ use std::hash::Hash;
 
 use anyhow::Result;
 use dashmap::DashMap;
-use dashmap::iter::Iter;
 use dashmap::mapref::one::Ref;
+use dashmap::rayon::map::Iter;
+use rayon::iter::IntoParallelRefIterator;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -24,6 +25,7 @@ impl<K> HashIndex<K>
     Hash +
     Clone +
     Send +
+    Sync +
     'static
 {
     pub fn new() -> Self {
@@ -54,8 +56,8 @@ impl<K> HashIndex<K>
         self.kv.get(idx)
     }
 
-    pub fn iter(&self) -> Iter<String, K> {
-        self.kv.iter()
+    pub fn iter(&self) -> Iter<'_, String, K> {
+        self.kv.par_iter()
     }
 
     pub fn clear(&self) {

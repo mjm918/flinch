@@ -1,8 +1,12 @@
 use std::collections::HashSet;
 use std::hash::Hash;
-use std::sync::{Arc};
-
+use std::sync::{Arc, Mutex};
 use dashmap::{DashMap, DashSet};
+use dashmap::rayon::map::Iter;
+use rayon::prelude::*;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use tokio::io::AsyncReadExt;
 use tokio::task::JoinHandle;
 
 pub struct InvertedIndex<K> {
@@ -10,15 +14,17 @@ pub struct InvertedIndex<K> {
 }
 
 impl<K> InvertedIndex<K>
-    where K: PartialOrd
-    +  Ord
-    +  PartialEq
-    +  Eq
-    +  Hash
-    +  Clone
-    +  Send
-    +  Sync
-    + 'static
+    where K: Serialize +
+    DeserializeOwned +
+    PartialOrd +
+    Ord +
+    PartialEq +
+    Eq +
+    Hash +
+    Clone +
+    Send +
+    Sync +
+    'static
 {
     pub fn new() -> Self {
         Self {
@@ -28,7 +34,7 @@ impl<K> InvertedIndex<K>
 
     pub fn put(&self, k: K, v: String) -> JoinHandle<()> {
         let rf = self.kv.clone();
-        tokio::task::spawn(async move {
+        tokio::spawn(async move {
             for w in v.split_whitespace() {
                 let token = w.to_lowercase();
                 let key = &k;
@@ -82,9 +88,32 @@ impl<K> InvertedIndex<K>
     }
 
     pub fn w_find(&self, words: Vec<&str>) -> Vec<K> {
-        let mut res = HashSet::new();
-        for kv in self.kv.iter() {
-            let key = kv.key();
+        let mut res = DashSet::new();
+        self.kv.par_iter().for_each(|rkv|{
+            let kv = rkv.pair();
+            let key = kv.0;
+            let mut counter = Arc::new(Mutex::new(0));
+            words.par_iter().for_each(|word|{
+                let mut c = counter.lock().unwrap();
+                let token = word.to_lowercase();
+                if key.contains(token.as_str()) {
+                    *c += 1;
+                }
+                if *c >= words.len() {
+                    let dk = kv.1.iter().map(|r|r.key().to_owned()).collect::<Vec<K>>();
+                    for k in dk {
+                        if res.get(&k).is_none() {
+                            res.insert(k);
+                        }
+                    }
+                }
+            });
+        });
+        res.into_iter().collect()
+        /*let mut res = HashSet::new();
+        for rkv in self.kv.iter() {
+            let kv = rkv.pair();
+            let key = kv.0;
             let mut counter = 0;
             for word in words.iter() {
                 let token = word.to_lowercase();
@@ -93,7 +122,7 @@ impl<K> InvertedIndex<K>
                 }
             }
             if counter >= words.len() {
-                let dk = kv.value().iter().map(|r|r.key().to_owned()).collect::<Vec<K>>();
+                let dk = kv.1.iter().map(|r|r.key().to_owned()).collect::<Vec<K>>();
                 for k in dk {
                     if res.get(&k).is_none() {
                         res.insert(k);
@@ -101,7 +130,7 @@ impl<K> InvertedIndex<K>
                 }
             }
         }
-        res.into_iter().collect()
+        res.into_iter().collect()*/
     }
 
     pub fn clear(&self) {

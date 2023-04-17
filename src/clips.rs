@@ -1,7 +1,8 @@
 use std::hash::Hash;
 use dashmap::{DashMap, DashSet};
-use dashmap::iter::Iter;
+use dashmap::rayon::map::Iter;
 use dashmap::mapref::one::{Ref};
+use rayon::prelude::IntoParallelRefIterator;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use crate::doc::Document;
@@ -21,6 +22,7 @@ where K: Serialize +
         Hash +
         Clone +
         Send +
+        Sync +
         'static
 {
     pub fn new() -> Self {
@@ -91,7 +93,7 @@ where K: Serialize +
     }
 
     pub fn iter(&self) -> Iter<String, DashSet<K>> {
-        self.kv.iter()
+        self.kv.par_iter()
     }
 
     pub fn clear(&self) {

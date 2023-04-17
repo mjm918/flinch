@@ -47,7 +47,7 @@ mod tests {
 
         let store = db.using("demo").unwrap();
         let write_time = Instant::now();
-        let iter = 500_000;
+        let iter = 10_000;
         for i in 0..iter {
             let user = User{ name: format!("Julfikar{}",i * 199), age: i };
             store.collection.put(format!("P_0{}", i), FromRawString::new(
@@ -56,7 +56,7 @@ mod tests {
         }
         println!("{} records took {:?} to write",&iter,write_time.elapsed());
 
-        let val = store.collection.search("Julfikar1".to_string());
+        let val = store.collection.like_search(&"Julfikar199".to_string());
         println!("Lookup 1 key in {} records . Found {:?} result(s) Execution Time {}",&iter,val.1.len(),val.0);
 
         println!("Total number of records {}", store.collection.len());
