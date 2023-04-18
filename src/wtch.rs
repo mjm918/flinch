@@ -69,9 +69,14 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
     }
 
     async fn broadcast(&mut self, msg: M) {
-        for index in 0..=(self.chans.len() - 2) {
-            let msg = msg.clone();
-            let _ = self.chans[index].send(msg).await;
+        if self.chans.len() == 0 {
+            return;
+        }
+        if self.chans.len() > 1 {
+            for index in 0..=(self.chans.len() - 2) {
+                let msg = msg.clone();
+                let _ = self.chans[index].send(msg).await;
+            }
         }
         let _ = self.chans[self.chans.len() - 1].send(msg).await;
     }

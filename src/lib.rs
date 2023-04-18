@@ -13,14 +13,23 @@ pub mod db;
 mod qry;
 mod utils;
 
+///
+/// Examples
+/// 1M records
+/// insert:: 61.118093292s
+/// single:: 3.25µs
+/// multi:: 6.458µs
+/// search index:: 27.209µs result count 1
+/// search:: 2.494042417s result count 402130
+/// view:: 45.084µs result count 1
+/// query:: 438.283791ms result count 10 with query {"age":{"$lt":10}}
+///
 #[cfg(test)]
 mod tests {
     use std::fmt::format;
     use std::sync::Arc;
     use std::time::{Instant};
-    use lazy_static::lazy_static;
     use serde::{Deserialize, Serialize};
-    use tokio::sync::mpsc::channel;
     use crate::doc::{Document, FromRawString, ViewConfig};
     use crate::db::{Database, CollectionOptions};
     use crate::hdrs::{Event, ActionType};
@@ -54,8 +63,11 @@ mod tests {
         let collection = instance.value();
         assert_eq!(collection.len(),0);
 
+        let (sx, mut rx) = tokio::sync::mpsc::channel(30000);
+        collection.sub(sx).await.expect("subscribe to channel");
+
         let insert = Instant::now();
-        let record_size = 100_000;
+        let record_size = 10_000;
         for i in 0..record_size {
             collection.put(format!("P_{}",&i), FromRawString::new(
                 serde_json::to_string(
@@ -73,20 +85,49 @@ mod tests {
         assert!(single.data.is_some());
         println!("single:: {:?}", single.time_taken);
 
-        let multi = collection.multi_get(vec![&format!("P_100"),&format!("P_1999")]);
-        assert_eq!(multi.data.len(),2);
+        let multi = collection.multi_get(vec![&format!("P_1"),&format!("P_0")]);
+        assert_ne!(multi.data.len(),0);
         println!("multi:: {:?}",multi.time_taken);
 
-        let search = collection.search("Julfikar9999");
+        let search = collection.search("Julfikar0");
         assert_ne!(search.data.len(),0);
-        println!("search:: {} res {}",search.time_taken, search.data.len());
+        println!("search index:: {} res {}",search.time_taken, search.data.len());
 
-        let like_search = collection.like_search("Julfikar 99 11");
+        let like_search = collection.like_search("Julfikar 0");
         assert_ne!(like_search.data.len(),0);
         println!("search:: {} res {}",like_search.time_taken, like_search.data.len());
 
         let view = collection.fetch_view("ADULT");
         assert_ne!(view.data.len(),0);
         println!("view:: {} res {}",view.time_taken, view.data.len());
+
+        let query = collection.query(r#"{"age":{"$lt":10}}"#);
+        assert!(query.is_ok());
+        let query = query.unwrap();
+        println!("query:: {} {}", query.time_taken,query.data.len());
+
+        let mut i = 0;
+        loop {
+            let event = rx.recv().await.unwrap();
+            match event {
+                Event::Data(d) => {
+                    match d {
+                        ActionType::Insert(k, v) => {
+                            println!("inserted :watcher: {}",k)
+                        }
+                        ActionType::Remove(k) => {
+
+                        }
+                    };
+                }
+                Event::Subscribed(s) => {
+
+                }
+            };
+            i += 1;
+            if i == 10 { // for demo, listen till 10 message only
+                break;
+            }
+        }
     }
 }

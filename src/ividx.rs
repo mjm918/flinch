@@ -8,6 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::io::AsyncReadExt;
 use tokio::task::JoinHandle;
+use crate::utils::tokenize;
 
 pub struct InvertedIndex<K> {
     pub kv: Arc<DashMap<String, DashSet<K>>>
@@ -35,7 +36,8 @@ impl<K> InvertedIndex<K>
     pub fn put(&self, k: K, v: String) -> JoinHandle<()> {
         let rf = self.kv.clone();
         tokio::spawn(async move {
-            for w in v.split_whitespace() {
+            let separated = tokenize(&v);
+            for w in separated {
                 let token = w.to_lowercase();
                 let key = &k;
                 match rf.get_mut(&token) {

@@ -23,3 +23,23 @@ pub fn set_view_name(name: &str) -> String {
 pub fn get_view_name(name: &str) -> String {
     name.replace(":view:","")
 }
+pub fn tokenize(query: &String) -> Vec<String> {
+    query
+        .clone()
+        .trim()
+        .to_lowercase()
+        .replace("(", " ")
+        .replace(")", " ")
+        .replace("+", " ")
+        .replace("-", " ")
+        .replace("/", " ")
+        .replace("\\", " ")
+        .replace("_", " ")
+        .replace("[", " ")
+        .replace("]", " ")
+        .split_whitespace()
+        .into_iter()
+        .filter(|&char| !char.is_empty())
+        .map(|char| char.to_string())
+        .collect::<Vec<_>>()
+}

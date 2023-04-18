@@ -18,6 +18,7 @@ use crate::err::QueryError;
 use crate::hdrs::{Event, ActionType, SessionRes, QueryResult, QueryType};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;
+use crate::qry::Query;
 use crate::range::Range;
 use crate::sess::Session;
 use crate::utils::ExecTime;
@@ -305,11 +306,24 @@ where K: Serialize
         self.kv.clear();
     }
 
-    pub fn query(&self, cmd: &str) -> Result<SegQueue<RefMulti<K, D>>, QueryError> {
+    pub fn query(&self, cmd: &str) -> Result<QueryResult<SegQueue<(K, D)>>, QueryError> {
+        let exec = ExecTime::new();
+        let qry = Query::new(cmd);
+        if qry.is_err() {
+            return Err(qry.err().unwrap());
+        }
+        let qry = qry.unwrap();
         let mut res = SegQueue::new();
         self.iter().for_each(|it|{
-            let chk = it.value().document().pointer(cmd);
+            let is_ok = qry.filter(it.value());
+            if is_ok {
+                res.push((it.key().clone(), it.value().clone()));
+            }
         });
-        Ok(res)
+        Ok(QueryResult {
+            query: QueryType::Query(cmd.to_string()),
+            data: res,
+            time_taken: exec.done(),
+        })
     }
 }
