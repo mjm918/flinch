@@ -110,27 +110,6 @@ impl<K> InvertedIndex<K>
             });
         });
         res.into_iter().collect()
-        /*let mut res = HashSet::new();
-        for rkv in self.kv.iter() {
-            let kv = rkv.pair();
-            let key = kv.0;
-            let mut counter = 0;
-            for word in words.iter() {
-                let token = word.to_lowercase();
-                if key.contains(token.as_str()) {
-                    counter += 1;
-                }
-            }
-            if counter >= words.len() {
-                let dk = kv.1.iter().map(|r|r.key().to_owned()).collect::<Vec<K>>();
-                for k in dk {
-                    if res.get(&k).is_none() {
-                        res.insert(k);
-                    }
-                }
-            }
-        }
-        res.into_iter().collect()*/
     }
 
     pub fn clear(&self) {

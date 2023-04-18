@@ -15,7 +15,7 @@ use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
 use crate::err::QueryError;
-use crate::hdrs::{Event, ActionType, SessionRes};
+use crate::hdrs::{Event, ActionType, SessionRes, QueryResult, QueryType};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;
 use crate::range::Range;
@@ -110,118 +110,171 @@ where K: Serialize
 
     pub async fn delete_by_range(&self, field: &str, from: String, to: String) -> ExecutionTime {
         let exec = ExecTime::new();
-        let res = self.range(field, from, to);
-        for kv in res.1.iter() {
-            self.delete(kv.clone().0).await;
+        let res = self.fetch_range(field, from, to).data;
+        for kv in res.iter() {
+            self.delete(kv.0.clone()).await;
         }
         exec.done()
     }
 
     pub async fn delete_by_clip(&self, clip: &str) -> ExecutionTime {
         let exec = ExecTime::new();
-        let res = self.get_clip(clip);
-        for kv in res.1 {
+        let res = self.fetch_clip(clip).data;
+        for kv in res.iter() {
             self.delete(kv.0.clone()).await;
         }
         exec.done()
     }
 
-    pub fn multi_get(&self, keys: Vec<&K>) -> (ExecutionTime, Vec<Ref<K, D>>) {
+    pub fn multi_get(&self, keys: Vec<&K>) -> QueryResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::with_capacity(keys.len());
         keys.iter().for_each(|k|{
             if let Some(v) = self.kv.get(k){
-                res.push(v);
+                let pair = v.pair();
+                res.push((pair.0.clone(), pair.1.clone()));
             }
         });
-        (exec.done(), res)
+        QueryResult {
+            query: QueryType::LookupMulti,
+            data: res,
+            time_taken: exec.done()
+        }
     }
 
-    pub fn range(&self, field: &str, from: String, to: String) -> (ExecutionTime, Vec<(K, D)>) {
+    pub fn fetch_range(&self, field: &str, from: String, to: String) -> QueryResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::new();
+        let q = format!("field {} from {} to {}", &field, &from, &to);
         for k in self.range.range(field, from, to) {
             if let Some(v) = self.kv.get(&k) {
                 res.push((k.clone(), v.clone()));
             }
         }
-        (exec.done(), res)
+        QueryResult {
+            query: QueryType::FetchRange(q),
+            data: res,
+            time_taken: exec.done(),
+        }
     }
 
-    pub fn get(&self, k: &K) -> (ExecutionTime, Option<Ref<K, D>>) {
+    pub fn get(&self, k: &K) -> QueryResult<Option<(K, D)>> {
         let exec = ExecTime::new();
-        (exec.done(), self.kv.get(k))
+        let res = if let Some(res) = self.kv.get(k) {
+            let pair = res.pair();
+            Some((pair.0.clone(), pair.1.clone()))
+        } else {
+            None
+        };
+        QueryResult {
+            query: QueryType::Lookup,
+            data: res,
+            time_taken: exec.done()
+        }
     }
 
-    pub fn get_idx(&self, idx: &str) -> (ExecutionTime, Option<Ref<K, D>>) {
+    pub fn get_index(&self, index: &str) -> QueryResult<Option<(K, D)>> {
         let exec = ExecTime::new();
-        let res = match self.hash_idx.get(idx) {
+        let res = match self.hash_idx.get(index) {
             None => None,
             Some(v) => {
-                self.kv.get(v.value())
+                let kv = self.kv.get(v.value());
+                if kv.is_some() {
+                    let kv = kv.unwrap();
+                    let pair = kv.pair();
+                    Some((pair.0.clone(), pair.1.clone()))
+                } else {
+                    None
+                }
             }
         };
-        (exec.done(), res)
+        QueryResult {
+            query: QueryType::LookupIndex(index.to_string()),
+            data: res,
+            time_taken: exec.done()
+        }
     }
 
-    pub fn get_clip(&self, clip: &str) -> (ExecutionTime, Vec<(K, D)>) {
+    pub fn fetch_clip(&self, clip: &str) -> QueryResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let res = match self.clips.get(clip) {
             Some(v) => {
                 let mut res = Vec::with_capacity(v.value().len());
                 for k in v.value().iter() {
                     if let Some(kv) = self.kv.get(&k) {
-                        res.push((k.clone(), kv.clone()));
+                        let pair = kv.pair();
+                        res.push((pair.0.clone(), pair.1.clone()));
                     }
                 }
                 res
             }
             None => vec![]
         };
-        (exec.done(), res)
+        QueryResult {
+            query: QueryType::FetchClip(clip.to_string()),
+            data: res,
+            time_taken: exec.done()
+        }
     }
 
-    pub fn fetch_view(&self, view_name: &str) -> (ExecutionTime, Vec<(K, Value)>) {
+    pub fn fetch_view(&self, view_name: &str) -> QueryResult<Vec<(K, Value)>> {
         let exec = ExecTime::new();
         let res = match self.clips.get_view(view_name) {
             Some(v) => {
                 let mut res = Vec::with_capacity(v.value().len());
                 for k in v.value().iter() {
                     if let Some(kd) = self.kv.get(&k) {
-                        res.push((kd.key().clone(), kd.value().document().clone()));
+                        let pair = kd.pair();
+                        res.push((pair.0.clone(), pair.1.document().clone()));
                     }
                 }
                 res
             }
             None => vec![]
         };
-        (exec.done(), res)
+        QueryResult {
+            query: QueryType::FetchView(view_name.to_string()),
+            data: res,
+            time_taken: exec.done(),
+        }
     }
 
-    pub fn search(&self, text: &String) -> (ExecutionTime, Vec<Ref<K, D>>) {
+    pub fn search(&self, query: &str) -> QueryResult<Vec<(K, D)>> {
+        let text = query.to_string();
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.find(words);
         let mut res = Vec::with_capacity(keys.len());
         for key in keys {
             if let Some(kv) = self.kv.get(&key) {
-                res.push(kv);
+                let pair = kv.pair();
+                res.push((pair.0.clone(), pair.1.clone()));
             }
         }
-        (exec.done(), res)
+        QueryResult {
+            query: QueryType::Lookup,
+            data: res,
+            time_taken: exec.done()
+        }
     }
 
-    pub fn like_search(&self, text: &String) -> (ExecutionTime, ArrayQueue<D>) {
+    pub fn like_search(&self, query: &str) -> QueryResult<ArrayQueue<(K, D)>> {
+        let text = query.to_string();
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.w_find(words);
         let mut res = ArrayQueue::new(keys.len());
         keys.par_iter().for_each(|key|{
             if let Some(kv) = self.kv.get(key) {
-                let _ = res.push(kv.clone());
+                let pair = kv.pair();
+                let _ = res.push((pair.0.clone(), pair.1.clone()));
             }
         });
-        (exec.done(), res)
+        QueryResult{
+            query: QueryType::LikeSearch(text),
+            data: res,
+            time_taken: exec.done()
+        }
     }
 
     pub fn iter(&self) -> Iter<'_, K, D> {
@@ -256,7 +309,6 @@ where K: Serialize
         let mut res = SegQueue::new();
         self.iter().for_each(|it|{
             let chk = it.value().document().pointer(cmd);
-
         });
         Ok(res)
     }

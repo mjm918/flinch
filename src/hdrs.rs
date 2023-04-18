@@ -31,3 +31,22 @@ pub enum SessionRes {
     Timeout,
     Err(String),
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+pub enum QueryType {
+    Lookup,
+    LookupMulti,
+    LookupIndex(String),
+    LikeSearch(String),
+    FetchView(String),
+    FetchClip(String),
+    FetchRange(String),
+    Query(String)
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct QueryResult<T> {
+    pub query: QueryType,
+    pub data: T,
+    pub time_taken: String
+}
