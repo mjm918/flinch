@@ -18,14 +18,8 @@ pub struct CollectionOptions {
     pub clips_opts: Vec<String>
 }
 
-pub struct Storage <K, D> where D: Document {
-    pub name: String,
-    pub collection: Collection<K, D>,
-    pub created_at: DateTime<Local>
-}
-
 pub struct Database<K, D> where D: Document {
-    storage: DashMap<String, Storage<K, D>>
+    storage: DashMap<String, Collection<K, D>>
 }
 
 impl<K, D> Database<K,D>
@@ -51,15 +45,11 @@ impl<K, D> Database<K,D>
         if let Err(err) = self.store_exists(opts.name.as_str()) {
             return Err(err);
         }
-        self.storage.insert(opts.name.clone(), Storage {
-            name: opts.name.clone(),
-            collection: Collection::<K, D>::new(opts),
-            created_at: Local::now()
-        });
+        self.storage.insert(opts.name.clone(), Collection::<K, D>::new(opts));
         Ok(())
     }
 
-    pub fn using(&self, name: &str) -> Result<Ref<String, Storage<K, D>>, CollectionError> {
+    pub fn using(&self, name: &str) -> Result<Ref<String, Collection<K, D>>, CollectionError> {
         if let Some(col) = self.storage.get(name) {
             return Ok(col);
         }
@@ -67,7 +57,7 @@ impl<K, D> Database<K,D>
     }
 
     fn store_exists(&self, name: &str) -> Result<(), CollectionError> {
-        if let Some(col) = self.storage.get(name) {
+        if let Some(_) = self.storage.get(name) {
             return Err(CollectionError::DuplicateCollection);
         }
         Ok(())

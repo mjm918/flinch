@@ -37,6 +37,10 @@ pub enum CollectionError {
 pub enum QueryError {
     #[error("query expression error `{0}`")]
     ParseError(String),
+    #[error("query is not valid object")]
+    QueryIsNotObject,
+    #[error("filter must be object")]
+    FilterMustBeObject,
     #[error("no result found")]
     NoResult
 }

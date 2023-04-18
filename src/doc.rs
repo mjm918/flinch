@@ -87,11 +87,14 @@ impl Clips for FromRawString {
             for token in self.tokens.clone().unwrap() {
                 if obj.contains_key(&token) {
                     let v = obj.get(&token)
-                            .unwrap()
+                        .unwrap();
+                    if v.as_str().is_some() {
+                        let v = v
                             .as_str()
                             .unwrap()
                             .to_string();
-                    tokens.push(v);
+                        tokens.push(v);
+                    }
                 }
             }
             tokens
