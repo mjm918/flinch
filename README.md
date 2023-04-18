@@ -1,5 +1,7 @@
 <img src="./assets/flinch.png" alt="Flinch">
 
+[![Rust](https://github.com/mjm918/flinch/actions/workflows/rust.yml/badge.svg)](https://github.com/mjm918/flinch/actions/workflows/rust.yml)
+
 Flinch is an in-memory, real-time document database designed for fast and efficient full-text search. It comes with a built-in full-text search engine that enables both "search-as-you-type" and wildcard search capabilities. Flinch was created with the goal of providing a high-performance search solution that can be integrated into various applications.
 
 # Features
