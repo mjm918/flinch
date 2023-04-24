@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::err::{DocumentError, QueryError};
+use crate::err::{DocumentError};
 use crate::db::CollectionOptions;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -64,12 +62,14 @@ impl Index for FromRawString {
             let mut indexes = vec![];
             for key in self.keys.clone().unwrap() {
                 if obj.contains_key(&key) {
-                    let v = obj.get(&key)
+                    let chk = obj.get(&key)
                         .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_string();
-                    indexes.push(v);
+                        .as_str();
+                    if chk.is_some() {
+                        let v = chk.unwrap()
+                            .to_string();
+                        indexes.push(v);
+                    }
                 }
             }
             indexes
@@ -89,11 +89,13 @@ impl Clips for FromRawString {
                     let v = obj.get(&token)
                         .unwrap();
                     if v.as_str().is_some() {
-                        let v = v
-                            .as_str()
-                            .unwrap()
-                            .to_string();
-                        tokens.push(v);
+                        let chk = v
+                            .as_str();
+                        if chk.is_some() {
+                            let v = chk.unwrap()
+                                .to_string();
+                            tokens.push(v);
+                        }
                     }
                 }
             }

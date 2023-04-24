@@ -12,6 +12,8 @@ pub mod col;
 pub mod db;
 mod qry;
 mod utils;
+mod kwr;
+mod cmf;
 
 ///
 /// Examples
@@ -26,8 +28,6 @@ mod utils;
 ///
 #[cfg(test)]
 mod tests {
-    use std::fmt::format;
-    use std::sync::Arc;
     use std::time::{Instant};
     use serde::{Deserialize, Serialize};
     use crate::doc::{Document, FromRawString, ViewConfig};
@@ -93,7 +93,7 @@ mod tests {
         assert_ne!(search.data.len(),0);
         println!("search index:: {} res {}",search.time_taken, search.data.len());
 
-        let like_search = collection.like_search("Julfikar 0");
+        let like_search = collection.like_search("Julfikar 101");
         assert_ne!(like_search.data.len(),0);
         println!("search:: {} res {}",like_search.time_taken, like_search.data.len());
 
@@ -101,8 +101,10 @@ mod tests {
         assert_ne!(view.data.len(),0);
         println!("view:: {} res {}",view.time_taken, view.data.len());
 
-        let query = collection.query(r#"{"age":{"$lt":10}}"#);
-        assert!(query.is_ok());
+        //{"age":{"$neq":100}, "name":{"$neq":"julfikar0"}}
+        //{"$or":[{"name":{"$eq":"julfikar0"}},{"name":{"$eq":"fikar0"}}]}
+        let query = collection.query(r#"{"$limit":1,"$or":[{"name":{"$eq":"julfikar"}},{"age":{"$lt":5}}]}"#);
+        assert!(query.is_ok(), "{}", query.err().unwrap().to_string());
         let query = query.unwrap();
         println!("query:: {} {}", query.time_taken,query.data.len());
 
@@ -112,15 +114,15 @@ mod tests {
             match event {
                 Event::Data(d) => {
                     match d {
-                        ActionType::Insert(k, v) => {
+                        ActionType::Insert(k, _v) => {
                             println!("inserted :watcher: {}",k)
                         }
-                        ActionType::Remove(k) => {
+                        ActionType::Remove(_k) => {
 
                         }
                     };
                 }
-                Event::Subscribed(s) => {
+                Event::Subscribed(_s) => {
 
                 }
             };

@@ -1,17 +1,26 @@
 use std::time::{Duration, Instant};
 
 pub struct ExecTime {
-    pub timer: Instant,
+    timer: Instant,
+    first_hit: String,
 }
 
 impl ExecTime {
     pub fn new() -> Self {
         Self {
-            timer: Instant::now()
+            timer: Instant::now(),
+            first_hit: "".to_string()
         }
     }
+    pub fn first_hit(&mut self) {
+        self.first_hit = format!("{:?}",&self.timer.elapsed());
+    }
     pub fn done(&self) -> String {
-        format!("{:?}", self.timer.elapsed())
+        if self.first_hit.is_empty() {
+            format!("{:?}", self.timer.elapsed())
+        } else {
+            format!("first hit {} time taken {:?}", self.first_hit, self.timer.elapsed())
+        }
     }
 }
 

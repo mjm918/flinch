@@ -44,6 +44,12 @@ pub enum QueryType {
     Query(String)
 }
 
+#[derive(PartialEq)]
+pub enum DataTypes {
+    String,
+    Number
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct QueryResult<T> {
     pub query: QueryType,

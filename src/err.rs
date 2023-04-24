@@ -39,8 +39,14 @@ pub enum QueryError {
     ParseError(String),
     #[error("query is not valid object")]
     QueryIsNotObject,
-    #[error("filter must be object")]
-    FilterMustBeObject,
+    #[error("filter must be array or object. found `{0}`")]
+    FilterMustBeArrOrObject(String),
     #[error("no result found")]
-    NoResult
+    NoResult,
+    #[error("value of `{0}` must be non-negative")]
+    MustBeNonNegative(String),
+    #[error("value of `{0}` must be non-zero or non-negative")]
+    MustBeNonZero(String),
+    #[error("invalid sort operator")]
+    InvalidSort
 }

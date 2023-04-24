@@ -3,8 +3,6 @@ use std::hash::Hash;
 use crossbeam_queue::{ArrayQueue, SegQueue};
 use dashmap::{DashMap, DashSet};
 use dashmap::rayon::map::Iter;
-use dashmap::mapref::multiple::RefMulti;
-use dashmap::mapref::one::Ref;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -264,7 +262,7 @@ where K: Serialize
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.w_find(words);
-        let mut res = ArrayQueue::new(keys.len());
+        let res = ArrayQueue::new(keys.len());
         keys.par_iter().for_each(|key|{
             if let Some(kv) = self.kv.get(key) {
                 let pair = kv.pair();
@@ -313,11 +311,14 @@ where K: Serialize
             return Err(qry.err().unwrap());
         }
         let qry = qry.unwrap();
-        let mut res = SegQueue::new();
+        let res = SegQueue::new();
         self.iter().for_each(|it|{
             let is_ok = qry.filter(it.value());
             if is_ok {
                 res.push((it.key().clone(), it.value().clone()));
+            }
+            if qry.limit.is_some() && res.len() >= qry.limit.unwrap() {
+                return ();
             }
         });
         Ok(QueryResult {

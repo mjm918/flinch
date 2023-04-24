@@ -2,11 +2,9 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use dashmap::{DashMap, DashSet};
-use dashmap::rayon::map::Iter;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tokio::io::AsyncReadExt;
 use tokio::task::JoinHandle;
 use crate::utils::tokenize;
 
@@ -90,7 +88,7 @@ impl<K> InvertedIndex<K>
     }
 
     pub fn w_find(&self, words: Vec<&str>) -> Vec<K> {
-        let mut res = DashSet::new();
+        let res = DashSet::new();
         self.kv.par_iter().for_each(|rkv|{
             let kv = rkv.pair();
             let key = kv.0;
