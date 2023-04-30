@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+use anyhow::Error;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use tokio::sync::mpsc::Sender;
 
 #[allow(dead_code)]
@@ -20,20 +22,20 @@ pub enum ActionType<K, D> {
     Remove(K),
 }
 #[derive(Clone)]
-pub enum Event<K, D> {
+pub enum PubSubEvent<K, D> {
     Data(ActionType<K, D>),
-    Subscribed(Sender<Event<K, D>>),
+    Subscribed(Sender<PubSubEvent<K, D>>),
 }
 
 #[derive(Debug)]
-pub enum SessionRes {
+pub enum PubSubRes {
     Closed,
     Timeout,
     Err(String),
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub enum QueryType {
+pub enum FuncType {
     Lookup,
     LookupMulti,
     LookupIndex(String),
@@ -51,8 +53,17 @@ pub enum DataTypes {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct QueryResult<T> {
-    pub query: QueryType,
+pub struct FuncResult<T> {
+    pub query: FuncType,
     pub data: T,
     pub time_taken: String
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct QueryResult {
+    pub query: String,
+    pub data: Vec<Value>,
+    pub errors: Vec<String>,
+    pub time_taken: String
+}
+

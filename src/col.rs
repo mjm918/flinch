@@ -12,13 +12,12 @@ use uuid::Uuid;
 use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
-use crate::err::QueryError;
-use crate::hdrs::{Event, ActionType, SessionRes, QueryResult, QueryType};
+use crate::err::{CollectionError, IndexError, QueryError};
+use crate::hdrs::{PubSubEvent, ActionType, PubSubRes, FuncResult, FuncType};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;
-use crate::qry::Query;
 use crate::range::Range;
-use crate::sess::Session;
+use crate::pbsb::PubSub;
 use crate::utils::ExecTime;
 use crate::wtch::Watchman;
 
@@ -28,8 +27,8 @@ pub struct Collection<K, D: Document> {
     inverted_idx: InvertedIndex<K>,
     clips: Clips<K>,
     range: Range<K>,
-    watchman: Session<Event<K, D>>,
-    opts: CollectionOptions
+    watchman: PubSub<PubSubEvent<K, D>>,
+    pub opts: CollectionOptions
 }
 pub type ExecutionTime = String;
 
@@ -54,35 +53,45 @@ where K: Serialize
             inverted_idx: InvertedIndex::new(),
             clips: Clips::new(),
             range: Range::new(),
-            watchman: Watchman::<Event<K, D>>::new(vec![]).unwrap().start(),
+            watchman: Watchman::<PubSubEvent<K, D>>::new(vec![]).unwrap().start(),
             opts
         }
     }
 
-    pub async fn sub(&self, sx: Sender<Event<K,D>>) -> Result<(), SessionRes> {
-        let _ = self.watchman.notify(Event::Subscribed(sx.clone())).await;
+    pub async fn sub(&self, sx: Sender<PubSubEvent<K,D>>) -> Result<(), PubSubRes> {
+        let _ = self.watchman.notify(PubSubEvent::Subscribed(sx.clone())).await;
         self.watchman.reg(sx).await
     }
 
-    pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, SessionRes> {
+    pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, IndexError> {
         let exec = ExecTime::new();
         let mut v = d;
         v.set_opts(&self.opts);
 
         let query = ActionType::Insert(k.clone(), v.clone());
-        let _ = self.watchman.notify(Event::Data(query)).await;
+        let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
 
-        if let Err(err) = self.hash_idx.put(&k, &v) {
-            return Err(SessionRes::Err(err.to_string()));
+        if !self.opts.index_opts.is_empty() {
+            if let Err(_err) = self.hash_idx.put(&k, &v) {
+                return Err(IndexError::DuplicateDocument);
+            }
         }
-        if let Some(vw) = v.binding() {
-            self.clips.put_view(&vw, &k);
+        if !self.opts.view_opts.is_empty() {
+            if let Some(vw) = v.binding() {
+                self.clips.put_view(&vw, &k);
+            }
         }
-        if let Some(val) = v.content() {
-            let _ = self.inverted_idx.put(k.clone(), val).await;
+        if !self.opts.search_opts.is_empty() {
+            if let Some(val) = v.content() {
+                let _ = self.inverted_idx.put(k.clone(), val).await;
+            }
         }
-        self.clips.put(&k, &v);
-        self.range.put(&k, &v);
+        if !self.opts.clips_opts.is_empty() {
+            self.clips.put(&k, &v);
+        }
+        if !self.opts.range_opts.is_empty() {
+            self.range.put(&k, &v);
+        }
         self.kv.insert(k, v);
 
         Ok(exec.done())
@@ -91,9 +100,10 @@ where K: Serialize
     pub async fn delete(&self, k: K) -> ExecutionTime {
         let exec = ExecTime::new();
         if self.kv.contains_key(&k) {
-            let (_, v) = self.kv.remove(&k).unwrap();
             let query = ActionType::<K,D>::Remove(k.clone());
-            let _ = self.watchman.notify(Event::Data(query)).await;
+            let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
+
+            let (_, v) = self.kv.remove(&k).unwrap();
 
             self.hash_idx.delete(&v.clone());
             if let Some(view) = v.binding() {
@@ -125,7 +135,7 @@ where K: Serialize
         exec.done()
     }
 
-    pub fn multi_get(&self, keys: Vec<&K>) -> QueryResult<Vec<(K, D)>> {
+    pub fn multi_get(&self, keys: Vec<&K>) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::with_capacity(keys.len());
         keys.iter().for_each(|k|{
@@ -134,14 +144,14 @@ where K: Serialize
                 res.push((pair.0.clone(), pair.1.clone()));
             }
         });
-        QueryResult {
-            query: QueryType::LookupMulti,
+        FuncResult {
+            query: FuncType::LookupMulti,
             data: res,
             time_taken: exec.done()
         }
     }
 
-    pub fn fetch_range(&self, field: &str, from: String, to: String) -> QueryResult<Vec<(K, D)>> {
+    pub fn fetch_range(&self, field: &str, from: String, to: String) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::new();
         let q = format!("field {} from {} to {}", &field, &from, &to);
@@ -150,14 +160,14 @@ where K: Serialize
                 res.push((k.clone(), v.clone()));
             }
         }
-        QueryResult {
-            query: QueryType::FetchRange(q),
+        FuncResult {
+            query: FuncType::FetchRange(q),
             data: res,
             time_taken: exec.done(),
         }
     }
 
-    pub fn get(&self, k: &K) -> QueryResult<Option<(K, D)>> {
+    pub fn get(&self, k: &K) -> FuncResult<Option<(K, D)>> {
         let exec = ExecTime::new();
         let res = if let Some(res) = self.kv.get(k) {
             let pair = res.pair();
@@ -165,14 +175,14 @@ where K: Serialize
         } else {
             None
         };
-        QueryResult {
-            query: QueryType::Lookup,
+        FuncResult {
+            query: FuncType::Lookup,
             data: res,
             time_taken: exec.done()
         }
     }
 
-    pub fn get_index(&self, index: &str) -> QueryResult<Option<(K, D)>> {
+    pub fn get_index(&self, index: &str) -> FuncResult<Option<(K, D)>> {
         let exec = ExecTime::new();
         let res = match self.hash_idx.get(index) {
             None => None,
@@ -187,14 +197,14 @@ where K: Serialize
                 }
             }
         };
-        QueryResult {
-            query: QueryType::LookupIndex(index.to_string()),
+        FuncResult {
+            query: FuncType::LookupIndex(index.to_string()),
             data: res,
             time_taken: exec.done()
         }
     }
 
-    pub fn fetch_clip(&self, clip: &str) -> QueryResult<Vec<(K, D)>> {
+    pub fn fetch_clip(&self, clip: &str) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let res = match self.clips.get(clip) {
             Some(v) => {
@@ -209,14 +219,14 @@ where K: Serialize
             }
             None => vec![]
         };
-        QueryResult {
-            query: QueryType::FetchClip(clip.to_string()),
+        FuncResult {
+            query: FuncType::FetchClip(clip.to_string()),
             data: res,
             time_taken: exec.done()
         }
     }
 
-    pub fn fetch_view(&self, view_name: &str) -> QueryResult<Vec<(K, Value)>> {
+    pub fn fetch_view(&self, view_name: &str) -> FuncResult<Vec<(K, Value)>> {
         let exec = ExecTime::new();
         let res = match self.clips.get_view(view_name) {
             Some(v) => {
@@ -231,14 +241,14 @@ where K: Serialize
             }
             None => vec![]
         };
-        QueryResult {
-            query: QueryType::FetchView(view_name.to_string()),
+        FuncResult {
+            query: FuncType::FetchView(view_name.to_string()),
             data: res,
             time_taken: exec.done(),
         }
     }
 
-    pub fn search(&self, query: &str) -> QueryResult<Vec<(K, D)>> {
+    pub fn search(&self, query: &str) -> FuncResult<Vec<(K, D)>> {
         let text = query.to_string();
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
@@ -250,14 +260,14 @@ where K: Serialize
                 res.push((pair.0.clone(), pair.1.clone()));
             }
         }
-        QueryResult {
-            query: QueryType::Lookup,
+        FuncResult {
+            query: FuncType::Lookup,
             data: res,
             time_taken: exec.done()
         }
     }
 
-    pub fn like_search(&self, query: &str) -> QueryResult<ArrayQueue<(K, D)>> {
+    pub fn like_search(&self, query: &str) -> FuncResult<ArrayQueue<(K, D)>> {
         let text = query.to_string();
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
@@ -269,8 +279,8 @@ where K: Serialize
                 let _ = res.push((pair.0.clone(), pair.1.clone()));
             }
         });
-        QueryResult{
-            query: QueryType::LikeSearch(text),
+        FuncResult {
+            query: FuncType::LikeSearch(text),
             data: res,
             time_taken: exec.done()
         }
@@ -296,35 +306,10 @@ where K: Serialize
         Uuid::new_v4().as_hyphenated().to_string()
     }
 
-    pub fn drop(&self) {
-        self.hash_idx.clear();
-        self.inverted_idx.clear();
-        self.range.clear();
-        self.clips.clear();
-        self.kv.clear();
-    }
-
-    pub fn query(&self, cmd: &str) -> Result<QueryResult<SegQueue<(K, D)>>, QueryError> {
-        let exec = ExecTime::new();
-        let qry = Query::new(cmd);
-        if qry.is_err() {
-            return Err(qry.err().unwrap());
+    pub async fn drop(&self) {
+        let local = self.kv.clone();
+        for kv in local {
+            self.delete(kv.0).await;
         }
-        let qry = qry.unwrap();
-        let res = SegQueue::new();
-        self.iter().for_each(|it|{
-            let is_ok = qry.filter(it.value());
-            if is_ok {
-                res.push((it.key().clone(), it.value().clone()));
-            }
-            if qry.limit.is_some() && res.len() >= qry.limit.unwrap() {
-                return ();
-            }
-        });
-        Ok(QueryResult {
-            query: QueryType::Query(cmd.to_string()),
-            data: res,
-            time_taken: exec.done(),
-        })
     }
 }

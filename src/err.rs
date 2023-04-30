@@ -15,6 +15,8 @@ pub enum DocumentError {
     StringParseError,
     #[error("invalid document provided. must be a key-value pair")]
     NotAnObject,
+    #[error("error parsing document")]
+    DocumentParseError
 }
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug)]
@@ -30,17 +32,23 @@ pub enum CollectionError {
     #[error("collection already exists")]
     DuplicateCollection,
     #[error("no such collection")]
-    NoSuchCollection
+    NoSuchCollection,
+    #[error("collection options are not valid")]
+    OptionsProvidedAreNotValid
 }
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug)]
 pub enum QueryError {
-    #[error("query expression error `{0}`")]
+    #[error("expression parse error `{0}`")]
     ParseError(String),
     #[error("query is not valid object")]
     QueryIsNotObject,
     #[error("filter must be array or object. found `{0}`")]
     FilterMustBeArrOrObject(String),
+    #[error("sort must be object. found `{0}`")]
+    SortMustBeArrOrObject(String),
+    #[error("sort direction is not valid")]
+    SortDirectionNotValid,
     #[error("no result found")]
     NoResult,
     #[error("value of `{0}` must be non-negative")]
@@ -48,5 +56,9 @@ pub enum QueryError {
     #[error("value of `{0}` must be non-zero or non-negative")]
     MustBeNonZero(String),
     #[error("invalid sort operator")]
-    InvalidSort
+    InvalidSort,
+    #[error("key `{0}` not valid")]
+    KeyNotValid(String),
+    #[error("field for `{0}` must be string")]
+    FilterMustBeString(String)
 }

@@ -114,5 +114,6 @@ impl<K> InvertedIndex<K>
 
     pub fn clear(&self) {
         self.kv.clear();
+        self.kv.shrink_to_fit();
     }
 }

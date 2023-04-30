@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use anyhow::Result;
-use dashmap::DashMap;
+use dashmap::{DashMap};
 use dashmap::mapref::one::Ref;
 use dashmap::rayon::map::Iter;
 use rayon::iter::IntoParallelRefIterator;
@@ -62,5 +62,6 @@ impl<K> HashIndex<K>
 
     pub fn clear(&self) {
         self.kv.clear();
+        self.kv.shrink_to_fit();
     }
 }

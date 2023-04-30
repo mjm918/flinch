@@ -5,15 +5,14 @@ mod clips;
 mod err;
 mod hdrs;
 mod wtch;
-mod sess;
+mod pbsb;
 mod act;
 pub mod doc;
 pub mod col;
 pub mod db;
-mod qry;
 mod utils;
-mod kwr;
-mod cmf;
+mod docv;
+mod exec;
 
 ///
 /// Examples
@@ -30,9 +29,10 @@ mod cmf;
 mod tests {
     use std::time::{Instant};
     use serde::{Deserialize, Serialize};
-    use crate::doc::{Document, FromRawString, ViewConfig};
-    use crate::db::{Database, CollectionOptions};
-    use crate::hdrs::{Event, ActionType};
+    use crate::doc::{Document, ViewConfig};
+    use crate::db::{Database, CollectionOptions, DatabaseWithQuery};
+    use crate::docv::QueryBased;
+    use crate::hdrs::{PubSubEvent, ActionType};
 
     const COLLECTION: &str = "demo";
     #[derive(Serialize, Deserialize)]
@@ -42,8 +42,7 @@ mod tests {
     }
     #[tokio::test]
     async fn it_works() {
-        let mut db : Database<String, FromRawString> = Database::init();
-        assert!(db.create(CollectionOptions{
+        let col_opts = CollectionOptions {
             name: COLLECTION.to_string(),
             index_opts: vec![format!("name")],
             search_opts: vec![format!("name")],
@@ -54,9 +53,15 @@ mod tests {
             }],
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
-        }).is_ok());
+        };
+        let mut database = DatabaseWithQuery::new();
+        database.query("create collection -> {};").unwrap();
 
-        let instance = db.using(COLLECTION);
+        /*let ttk = Instant::now();
+        let planner = session.query(r#"{"$set":{"document":[{"a":"1"}],"filter":{"product":1}}}"#);
+        println!("{} hmm...{:?}",planner.is_ok(), ttk.elapsed());*/
+
+        /*let instance = db.using(COLLECTION);
         assert!(instance.is_ok());
 
         let instance = instance.unwrap();
@@ -108,6 +113,10 @@ mod tests {
         let query = query.unwrap();
         println!("query:: {} {}", query.time_taken,query.data.len());
 
+        collection.drop().await;
+
+        assert_eq!(collection.len(),0,"after::drop");
+
         let mut i = 0;
         loop {
             let event = rx.recv().await.unwrap();
@@ -115,10 +124,10 @@ mod tests {
                 Event::Data(d) => {
                     match d {
                         ActionType::Insert(k, _v) => {
-                            println!("inserted :watcher: {}",k)
+                            println!("inserted :pub/sub: {}",k);
                         }
-                        ActionType::Remove(_k) => {
-
+                        ActionType::Remove(k) => {
+                            println!("removed :: {}",k);
                         }
                     };
                 }
@@ -130,6 +139,6 @@ mod tests {
             if i == 10 { // for demo, listen till 10 message only
                 break;
             }
-        }
+        }*/
     }
 }

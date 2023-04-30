@@ -2,7 +2,7 @@ use anyhow::{Result};
 use tokio::sync::mpsc::{channel, Sender};
 use crate::err::WatcherError;
 use crate::hdrs::{DestinationDown, Request, WatcherState};
-use crate::sess::Session;
+use crate::pbsb::PubSub;
 
 pub struct Watchman<M> {
     idx: usize,
@@ -20,9 +20,9 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
         })
     }
 
-    pub fn start(mut self) -> Session<M> {
+    pub fn start(mut self) -> PubSub<M> {
         let (sx, mut rx) = channel(30);
-        let session = Session::new(sx);
+        let session = PubSub::new(sx);
         tokio::spawn(async move {
             loop {
                 let res = rx.recv().await;

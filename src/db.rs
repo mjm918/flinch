@@ -1,13 +1,18 @@
-use anyhow::Result;
+use anyhow::{Error, Result};
 use std::hash::Hash;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
-use serde::{Serialize};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use crate::doc::{Document, ViewConfig};
-use crate::err::CollectionError;
+use crate::err::{CollectionError};
 use crate::col::{Collection};
+use crate::docv::QueryBased;
+use crate::exec::execute;
+use crate::hdrs::QueryResult;
 
+#[derive(Serialize, Deserialize)]
 pub struct CollectionOptions {
     pub name: String,
     pub index_opts: Vec<String>,
@@ -21,7 +26,7 @@ pub struct Database<K, D> where D: Document {
     storage: DashMap<String, Collection<K, D>>
 }
 
-impl<K, D> Database<K,D>
+impl<K, D> Database<K, D>
     where K: Serialize
     + DeserializeOwned
     + PartialOrd
@@ -40,25 +45,54 @@ impl<K, D> Database<K,D>
             storage: DashMap::new()
         }
     }
-    pub fn create(&mut self, opts: CollectionOptions) -> Result<(), CollectionError> {
-        if let Err(err) = self.store_exists(opts.name.as_str()) {
+
+    pub fn add(&self, opts: CollectionOptions) -> Result<(), CollectionError> {
+        if let Err(err) = self.exi(opts.name.as_str()) {
             return Err(err);
         }
         self.storage.insert(opts.name.clone(), Collection::<K, D>::new(opts));
         Ok(())
     }
 
-    pub fn using(&self, name: &str) -> Result<Ref<String, Collection<K, D>>, CollectionError> {
+    pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
+        if let Err(err) = self.exi(name) {
+            return Err(err);
+        }
+        let col = self.using(name);
+        let col = col.unwrap();
+            col.value().drop().await;
+        self.storage.remove(name);
+
+        Ok(())
+    }
+
+    pub fn using(&self, name: &str) -> Result<Ref<String,Collection<K, D>>, CollectionError> {
         if let Some(col) = self.storage.get(name) {
             return Ok(col);
         }
         Err(CollectionError::NoSuchCollection)
     }
 
-    fn store_exists(&self, name: &str) -> Result<(), CollectionError> {
+    fn exi(&self, name: &str) -> Result<(), CollectionError> {
         if let Some(_) = self.storage.get(name) {
             return Err(CollectionError::DuplicateCollection);
         }
         Ok(())
+    }
+}
+
+pub struct DatabaseWithQuery {
+    db: Database<String, QueryBased>
+}
+
+impl DatabaseWithQuery {
+    pub fn new() -> Self {
+        Self {
+            db: Database::init()
+        }
+    }
+
+    pub fn query(&self, ql: &str) -> QueryResult {
+        execute(&self.db.storage, ql)
     }
 }

@@ -86,5 +86,6 @@ impl<K> Range<K>
 
     pub fn clear(&self) {
         self.tree.clear();
+        self.tree.shrink_to_fit();
     }
 }
