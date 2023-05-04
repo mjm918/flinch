@@ -21,32 +21,29 @@ Refer to [lib.rs](src%2Flib.rs)
 # Query Example
 
  ```
- {
-     product_status: { gt: 0 },
-     cust_code: { like: "Abs-001" },
-     salesperson_id: { eq: "19982" },
-     uom_price: {
-         prop: "price",
-         lt: 10
-     }
- }
- ```
-assume `document` is something like below:
- ```
- {
-     product_code: "",
-     product_name: "",
-     product_status: 1 OR 0,
-     cust_code: [
-         "A12390",
-         "A89900"
-     ],
-     salesperson_id: [
-         19928,
-         18320
-     ],
-     uom_price:[
-         {id: 1, price: 9}
-     ]
- }
+    CREATE collection -> {};
+
+    DROP collection;
+    
+    LEN collection;
+    
+    UPSERT collection [{"avc":"1123"}];
+    
+    UPSERT collection {"avc":"1123"} WHERE $or:[{"$eq":{"a.b":1}}] $and:[{"$lt":{"a":3}}];
+    
+    PUT collection -> id -> {};
+    
+    EXISTS collection -> id;
+    
+    SEARCH collection -> 'your random query' OFFSET 0 LIMIT 1000000;
+    
+    GET collection WHERE {} SORT id DESC OFFSET 0 LIMIT 1000000;
+    
+    GET collection WHERE $or:[{"$eq":{"a.b":3}},{"$lt":{"b":3}}] OFFSET 0 LIMIT 1000000;
+    
+    GET collection -> id;
+    
+    DELETE collection -> id;
+    
+    DELETE collection WHERE $or:[{"$eq":{"a.b":1}}] $and:[{"$lt":{"a":3}}];
  ```
