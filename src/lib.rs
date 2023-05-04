@@ -27,12 +27,9 @@ mod exec;
 ///
 #[cfg(test)]
 mod tests {
-    use std::time::{Instant};
     use serde::{Deserialize, Serialize};
-    use crate::doc::{Document, ViewConfig};
-    use crate::db::{Database, CollectionOptions, DatabaseWithQuery};
-    use crate::docv::QueryBased;
-    use crate::hdrs::{PubSubEvent, ActionType};
+    use crate::doc::{ViewConfig};
+    use crate::db::{CollectionOptions, DatabaseWithQuery};
 
     const COLLECTION: &str = "demo";
     #[derive(Serialize, Deserialize)]
@@ -43,7 +40,7 @@ mod tests {
     #[tokio::test]
     async fn it_works() {
         let col_opts = CollectionOptions {
-            name: COLLECTION.to_string(),
+            name: Some(COLLECTION.to_string()),
             index_opts: vec![format!("name")],
             search_opts: vec![format!("name")],
             view_opts: vec![ViewConfig{
@@ -54,8 +51,9 @@ mod tests {
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
         };
-        let mut database = DatabaseWithQuery::new();
-        database.query("create collection -> {};").unwrap();
+        let database = DatabaseWithQuery::new();
+        let x = database.query(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
+        println!("{:?}",x.pop().unwrap());
 
         /*let ttk = Instant::now();
         let planner = session.query(r#"{"$set":{"document":[{"a":"1"}],"filter":{"product":1}}}"#);

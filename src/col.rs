@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::hash::Hash;
-use crossbeam_queue::{ArrayQueue, SegQueue};
+use crossbeam_queue::{ArrayQueue};
 use dashmap::{DashMap, DashSet};
 use dashmap::rayon::map::Iter;
 use rayon::prelude::*;
@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
-use crate::err::{CollectionError, IndexError, QueryError};
+use crate::err::{IndexError};
 use crate::hdrs::{PubSubEvent, ActionType, PubSubRes, FuncResult, FuncType};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;

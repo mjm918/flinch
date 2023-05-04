@@ -1,5 +1,4 @@
-use anyhow::Error;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
 
@@ -59,11 +58,10 @@ pub struct FuncResult<T> {
     pub time_taken: String
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct QueryResult {
-    pub query: String,
-    pub data: Vec<Value>,
-    pub errors: Vec<String>,
+    pub resp: Value,
+    pub error: String,
     pub time_taken: String
 }
 

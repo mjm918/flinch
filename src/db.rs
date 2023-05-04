@@ -1,20 +1,20 @@
-use anyhow::{Error, Result};
+use anyhow::{Result};
 use std::hash::Hash;
+use crossbeam_queue::SegQueue;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use crate::doc::{Document, ViewConfig};
 use crate::err::{CollectionError};
 use crate::col::{Collection};
 use crate::docv::QueryBased;
-use crate::exec::execute;
+use crate::exec::Query;
 use crate::hdrs::QueryResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct CollectionOptions {
-    pub name: String,
+    pub name: Option<String>,
     pub index_opts: Vec<String>,
     pub search_opts: Vec<String>,
     pub view_opts: Vec<ViewConfig>,
@@ -47,10 +47,14 @@ impl<K, D> Database<K, D>
     }
 
     pub fn add(&self, opts: CollectionOptions) -> Result<(), CollectionError> {
-        if let Err(err) = self.exi(opts.name.as_str()) {
+        if opts.name.is_none() {
+            return Err(CollectionError::OptionsProvidedAreNotValid);
+        }
+        let name = opts.name.as_ref().unwrap();
+        if let Err(err) = self.exi(name.as_str()) {
             return Err(err);
         }
-        self.storage.insert(opts.name.clone(), Collection::<K, D>::new(opts));
+        self.storage.insert(name.clone(), Collection::<K, D>::new(opts));
         Ok(())
     }
 
@@ -82,17 +86,17 @@ impl<K, D> Database<K, D>
 }
 
 pub struct DatabaseWithQuery {
-    db: Database<String, QueryBased>
+    query: Query
 }
 
 impl DatabaseWithQuery {
     pub fn new() -> Self {
         Self {
-            db: Database::init()
+            query: Query::new(Database::<String, QueryBased>::init())
         }
     }
 
-    pub fn query(&self, ql: &str) -> QueryResult {
-        execute(&self.db.storage, ql)
+    pub fn query(&self, ql: &str) -> SegQueue<QueryResult> {
+        self.query.exec(ql)
     }
 }

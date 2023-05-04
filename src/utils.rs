@@ -12,9 +12,6 @@ impl ExecTime {
             first_hit: "".to_string()
         }
     }
-    pub fn first_hit(&mut self) {
-        self.first_hit = format!("{:?}",&self.timer.elapsed());
-    }
     pub fn done(&self) -> String {
         if self.first_hit.is_empty() {
             format!("{:?}", self.timer.elapsed())

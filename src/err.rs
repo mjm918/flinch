@@ -39,26 +39,14 @@ pub enum CollectionError {
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug)]
 pub enum QueryError {
-    #[error("expression parse error `{0}`")]
+    #[error("query parse error `{0}`")]
     ParseError(String),
-    #[error("query is not valid object")]
-    QueryIsNotObject,
-    #[error("filter must be array or object. found `{0}`")]
-    FilterMustBeArrOrObject(String),
-    #[error("sort must be object. found `{0}`")]
-    SortMustBeArrOrObject(String),
-    #[error("sort direction is not valid")]
-    SortDirectionNotValid,
-    #[error("no result found")]
-    NoResult,
-    #[error("value of `{0}` must be non-negative")]
-    MustBeNonNegative(String),
-    #[error("value of `{0}` must be non-zero or non-negative")]
-    MustBeNonZero(String),
-    #[error("invalid sort operator")]
-    InvalidSort,
-    #[error("key `{0}` not valid")]
-    KeyNotValid(String),
-    #[error("field for `{0}` must be string")]
-    FilterMustBeString(String)
+    #[error("collection `{0}` already exists")]
+    CollectionExists(String),
+    #[error("collection `{0}` does not exist")]
+    CollectionNotExists(String),
+    #[error("configuration parse error `{0}`")]
+    ConfigureParseError(String),
+    #[error("upsert error `{0}`")]
+    UpsertError(String)
 }

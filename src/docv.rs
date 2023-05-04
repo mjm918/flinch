@@ -1,5 +1,3 @@
-use std::any::TypeId;
-use std::fmt::Display;
 use serde_json::{Map, Value};
 use serde::{Deserialize, Serialize};
 use crate::db::CollectionOptions;
