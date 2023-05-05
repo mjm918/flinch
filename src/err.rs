@@ -48,5 +48,13 @@ pub enum QueryError {
     #[error("configuration parse error `{0}`")]
     ConfigureParseError(String),
     #[error("upsert error `{0}`")]
-    UpsertError(String)
+    UpsertError(String),
+    #[error("`{0}` supported types: `bool`, `number`, `string`, `null`")]
+    CompareError(String),
+    #[error("comparison type mismatch")]
+    TypeMismatch,
+    #[error("direct object or array of objects currently not supported")]
+    DirectObjOrArrayOfObj,
+    #[error("operator `{0}` not supported for data type `{1}`")]
+    OperatorNotAllowed(String,String)
 }

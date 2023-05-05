@@ -31,7 +31,6 @@ pub fn get_view_name(name: &str) -> String {
 }
 pub fn tokenize(query: &String) -> Vec<String> {
     query
-        .clone()
         .trim()
         .to_lowercase()
         .replace("(", " ")
