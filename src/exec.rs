@@ -196,7 +196,9 @@ impl Query {
 
             col.value().iter().for_each(|item|{
                 let doc = item.value().document();
+                if self.cmp(&doc, &and).is_ok() {
 
+                }
             });
         }
         if clause.or.is_some() {
@@ -231,51 +233,132 @@ impl Query {
                 if !self.type_cmp(&key_v, &cmp_v) {
                     return Err(QueryError::TypeMismatch);
                 }
-
+                return self.both_cmp(&key_v,&cmp_v, &operator.0);
             }
         }
-        Ok(())
+        Err(QueryError::UnknownOperatorCompare)
     }
 
     fn both_cmp(&self, from_doc: &Value, cmp: &Value, operator: &str) -> Result<(), QueryError> {
-        let string = vec!["$eq","$neq","$lte","$gte","$gt","$lt","$like"];
+        let string = vec!["$eq","$neq","$like"];
         let number = vec!["$eq","$neq","$lte","$gte","$gt","$lt"];
-        let boolean = vec!["$eq"];
+        let boolean = vec!["$eq","$neq"];
         let array = vec!["$inc","$ninc"];
         if let Some(rhs) = from_doc.as_str() {
             if !string.contains(&operator) {
                 return Err(QueryError::OperatorNotAllowed(format!("{}",&operator),format!("String")));
+            }
+            if let Some(lhs) = cmp.as_str() {
+                let res = match operator {
+                    "$eq" => rhs.eq(lhs),
+                    "$neq" => !rhs.eq(lhs),
+                    "$like" => rhs.contains(lhs),
+                    _ => false
+                };
+                if res {
+                    return Ok(());
+                }
             }
         }
         if let Some(rhs) = from_doc.as_f64() {
             if !number.contains(&operator) {
                 return Err(QueryError::OperatorNotAllowed(format!("{}",&operator),format!("Number")));
             }
+            if let Some(lhs) = cmp.as_f64() {
+                let res = match operator {
+                    "$eq" => rhs == lhs,
+                    "$neq" => rhs != lhs,
+                    "$lt" => rhs < lhs,
+                    "$gt" => rhs > lhs,
+                    "$lte" => (rhs <= lhs),
+                    "$gte" => (rhs >= lhs),
+                    _ => false
+                };
+                if res {
+                    return Ok(());
+                }
+            }
         }
         if let Some(rhs) = from_doc.as_null() {
             if !boolean.contains(&operator) {
                 return Err(QueryError::OperatorNotAllowed(format!("{}",&operator),format!("Null")));
+            }
+            if let Some(lhs) = cmp.as_null() {
+                let res = match operator {
+                    "$eq" => rhs == lhs,
+                    "$neq" => rhs != lhs,
+                    _ => false
+                };
+                if res {
+                    return Ok(());
+                }
             }
         }
         if let Some(rhs) = from_doc.as_bool() {
             if !boolean.contains(&operator) {
                 return Err(QueryError::OperatorNotAllowed(format!("{}",&operator),format!("Boolean")));
             }
+            if let Some(lhs) = cmp.as_bool() {
+                let res = match operator {
+                    "$eq" => rhs == lhs,
+                    "$neq" => rhs != lhs,
+                    _ => false
+                };
+                if res {
+                    return Ok(());
+                }
+            }
         }
         if let Some(rhs) = from_doc.as_array() {
-
+            if !array.contains(&operator) {
+                return Err(QueryError::OperatorNotAllowed(format!("{}",&operator),format!("Array")));
+            }
+            if let Some(lhs) = cmp.as_str() {
+                for op in rhs {
+                    if let Some(cnv) = op.as_str() {
+                        match operator {
+                            "$inc" => op.eq(cnv),
+                            "$ninc" => !op.eq(cnv),
+                            _ => false
+                        };
+                    }
+                }
+            }
+            if let Some(lhs) = cmp.as_f64() {
+                for op in rhs {
+                    if let Some(cnv) = op.as_f64() {
+                        match operator {
+                            "$inc" => lhs == cnv,
+                            "$ninc" => lhs != cnv,
+                            _ => false
+                        };
+                    }
+                }
+            }
+            if let Some(lhs) = cmp.as_bool() {
+                for op in rhs {
+                    if let Some(cnv) = op.as_bool() {
+                        match operator {
+                            "$inc" => lhs == cnv,
+                            "$ninc" => lhs != cnv,
+                            _ => false
+                        };
+                    }
+                }
+            }
         }
         if let Some(rhs) = from_doc.as_object() {
             return Err(QueryError::DirectObjOrArrayOfObj);
         }
-        Ok(())
+        Err(QueryError::NoResult)
     }
 
     fn type_cmp(&self, right: &Value, left: &Value) -> bool {
         (right.is_string() && left.is_string()) ||
             (right.is_number() && left.is_number()) ||
             (right.is_null() && left.is_null()) ||
-            (right.is_boolean() && left.is_boolean())
+            (right.is_boolean() && left.is_boolean()) ||
+            (right.is_array() && (left.is_null() || left.is_boolean() || left.is_number() || left.is_string()))
     }
 
     fn cmp_type_ok(&self, v: &Value) -> bool {

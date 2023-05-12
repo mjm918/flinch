@@ -56,5 +56,9 @@ pub enum QueryError {
     #[error("direct object or array of objects currently not supported")]
     DirectObjOrArrayOfObj,
     #[error("operator `{0}` not supported for data type `{1}`")]
-    OperatorNotAllowed(String,String)
+    OperatorNotAllowed(String,String),
+    #[error("unknown operator compare")]
+    UnknownOperatorCompare,
+    #[error("no result found")]
+    NoResult
 }

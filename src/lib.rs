@@ -27,9 +27,12 @@ mod exec;
 ///
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
     use serde::{Deserialize, Serialize};
-    use crate::doc::{ViewConfig};
-    use crate::db::{CollectionOptions, DatabaseWithQuery};
+    use crate::doc::{Document, ViewConfig};
+    use crate::db::{CollectionOptions, Database, DatabaseWithQuery};
+    use crate::docv::QueryBased;
+    use crate::hdrs::{ActionType, PubSubEvent};
 
     const COLLECTION: &str = "demo";
     #[derive(Serialize, Deserialize)]
@@ -38,7 +41,7 @@ mod tests {
         age: i64
     }
     #[tokio::test]
-    async fn it_works() {
+    async fn library() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
             index_opts: vec![format!("name")],
@@ -51,15 +54,10 @@ mod tests {
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
         };
-        let database = DatabaseWithQuery::new();
-        let x = database.query(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
-        println!("{:?}",x.pop().unwrap());
+        let database = Database::init();
+        database.add(col_opts).expect("created new collection");
 
-        /*let ttk = Instant::now();
-        let planner = session.query(r#"{"$set":{"document":[{"a":"1"}],"filter":{"product":1}}}"#);
-        println!("{} hmm...{:?}",planner.is_ok(), ttk.elapsed());*/
-
-        /*let instance = db.using(COLLECTION);
+        let instance = database.using(COLLECTION);
         assert!(instance.is_ok());
 
         let instance = instance.unwrap();
@@ -72,7 +70,7 @@ mod tests {
         let insert = Instant::now();
         let record_size = 10_000;
         for i in 0..record_size {
-            collection.put(format!("P_{}",&i), FromRawString::new(
+            collection.put(format!("P_{}",&i), QueryBased::from_str(
                 serde_json::to_string(
                     &User {
                         name: format!("julfikar{}",&i),
@@ -104,13 +102,6 @@ mod tests {
         assert_ne!(view.data.len(),0);
         println!("view:: {} res {}",view.time_taken, view.data.len());
 
-        //{"age":{"$neq":100}, "name":{"$neq":"julfikar0"}}
-        //{"$or":[{"name":{"$eq":"julfikar0"}},{"name":{"$eq":"fikar0"}}]}
-        let query = collection.query(r#"{"$limit":1,"$or":[{"name":{"$eq":"julfikar"}},{"age":{"$lt":5}}]}"#);
-        assert!(query.is_ok(), "{}", query.err().unwrap().to_string());
-        let query = query.unwrap();
-        println!("query:: {} {}", query.time_taken,query.data.len());
-
         collection.drop().await;
 
         assert_eq!(collection.len(),0,"after::drop");
@@ -119,7 +110,7 @@ mod tests {
         loop {
             let event = rx.recv().await.unwrap();
             match event {
-                Event::Data(d) => {
+                PubSubEvent::Data(d) => {
                     match d {
                         ActionType::Insert(k, _v) => {
                             println!("inserted :pub/sub: {}",k);
@@ -129,7 +120,7 @@ mod tests {
                         }
                     };
                 }
-                Event::Subscribed(_s) => {
+                PubSubEvent::Subscribed(_s) => {
 
                 }
             };
@@ -137,6 +128,28 @@ mod tests {
             if i == 10 { // for demo, listen till 10 message only
                 break;
             }
-        }*/
+        }
+    }
+    // #[tokio::test]
+    async fn query() {
+        let col_opts = CollectionOptions {
+            name: Some(COLLECTION.to_string()),
+            index_opts: vec![format!("name")],
+            search_opts: vec![format!("name")],
+            view_opts: vec![ViewConfig{
+                prop: "age".to_string(),
+                expected: "18".to_string(),
+                view_name: "ADULT".to_string(),
+            }],
+            range_opts: vec![format!("age")],
+            clips_opts: vec![format!("name")],
+        };
+        let database = DatabaseWithQuery::new();
+        let x = database.query(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
+        println!("{:?}",x.pop().unwrap());
+
+        /*let ttk = Instant::now();
+        let planner = session.query(r#"{"$set":{"document":[{"a":"1"}],"filter":{"product":1}}}"#);
+        println!("{} hmm...{:?}",planner.is_ok(), ttk.elapsed());*/
     }
 }
