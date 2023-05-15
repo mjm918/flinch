@@ -146,7 +146,7 @@ mod tests {
         };
         let database = DatabaseWithQuery::new();
         let x = database.query(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
-        println!("{:?}",x.pop().unwrap());
+        println!("{:?}",x);
 
         /*let ttk = Instant::now();
         let planner = session.query(r#"{"$set":{"document":[{"a":"1"}],"filter":{"product":1}}}"#);

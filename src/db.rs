@@ -1,6 +1,5 @@
 use anyhow::{Result};
 use std::hash::Hash;
-use crossbeam_queue::SegQueue;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
@@ -96,7 +95,7 @@ impl DatabaseWithQuery {
         }
     }
 
-    pub fn query(&self, ql: &str) -> SegQueue<QueryResult> {
+    pub fn query(&self, ql: &str) -> QueryResult {
         self.query.exec(ql)
     }
 }
