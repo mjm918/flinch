@@ -59,9 +59,9 @@ pub struct FuncResult<T> {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct QueryResult {
-    pub resp: Value,
-    pub error: String,
+pub struct ActionResult {
+    pub error: bool,
+    pub message: String,
     pub time_taken: String
 }
 

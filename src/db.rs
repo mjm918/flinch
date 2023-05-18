@@ -8,8 +8,8 @@ use crate::doc::{Document, ViewConfig};
 use crate::err::{CollectionError};
 use crate::col::{Collection};
 use crate::docv::QueryBased;
-use crate::exec::Query;
-use crate::hdrs::QueryResult;
+use crate::plnr::Planner;
+use crate::hdrs::ActionResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct CollectionOptions {
@@ -85,17 +85,13 @@ impl<K, D> Database<K, D>
 }
 
 pub struct DatabaseWithQuery {
-    query: Query
+    pub planner: Planner
 }
 
 impl DatabaseWithQuery {
     pub fn new() -> Self {
         Self {
-            query: Query::new(Database::<String, QueryBased>::init())
+            planner: Planner::new(Database::<String, QueryBased>::init())
         }
-    }
-
-    pub fn query(&self, ql: &str) -> QueryResult {
-        self.query.exec(ql)
     }
 }

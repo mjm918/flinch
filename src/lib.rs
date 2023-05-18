@@ -12,7 +12,7 @@ pub mod col;
 pub mod db;
 mod utils;
 mod docv;
-mod exec;
+mod plnr;
 
 ///
 /// Examples
@@ -144,8 +144,9 @@ mod tests {
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
         };
-        let database = DatabaseWithQuery::new();
-        let x = database.query(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
+        let instance = DatabaseWithQuery::new();
+        let database = instance.planner;
+        let x = database.exec(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
         println!("{:?}",x);
 
         /*let ttk = Instant::now();

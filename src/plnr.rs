@@ -1,28 +1,32 @@
 use std::time::Instant;
 use evalexpr::*;
-use serde_json::{Value as SerdeValue, from_str as JsonFromStr};
+use rayon::prelude::*;
+use serde_json::{Value as SerdeValue, from_str as JsonFromStr, to_string as StrToJson};
 use dashmap::mapref::one::Ref;
+use futures::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
 use crate::col::Collection;
 use crate::db::{CollectionOptions, Database};
+use crate::doc::Document;
 use crate::docv::QueryBased;
 use crate::err::QueryError;
-use crate::hdrs::QueryResult;
+use crate::hdrs::{ActionResult, FuncResult};
 
-pub struct Query {
-    db: Database<String, QueryBased>
+pub struct Planner {
+    db: Database<String, QueryBased>,
+    context: HashMapContext
 }
 
-impl Query {
+impl Planner {
     pub fn new(db: Database<String, QueryBased>) -> Self {
-        Self { db }
+        let mut context = HashMapContext::new();
+        Self { db, context: HashMapContext::new() }
     }
-    
-    pub fn exec(&self, stmt: &str) -> QueryResult {
-        QueryResult {
-            resp: Default::default(),
-            error: "".to_string(),
-            time_taken: "".to_string(),
-        }
+
+    pub fn exec<'a>(&'a self, stmt: &'a str) -> EvalexprResult<Value> {
+        let binding = self.action_context_filter();
+        let context = binding.as_ref().unwrap();
+        eval_with_context(stmt, context)
     }
 
     fn col(&self, name:&str) -> Result<Ref<String, Collection<String, QueryBased>>, QueryError> {
@@ -34,16 +38,16 @@ impl Query {
         }
     }
 
-    fn action_context_filter(&'static self) -> Result<HashMapContext, EvalexprError> {
+    fn action_context_filter(&self) -> Result<HashMapContext, EvalexprError> {
         context_map! {
             "new" => Function::new(|args|{
                 let chk = self.check_new_col(args);
                 if let Ok(options) = chk {
                     if let Err(er) = self.db.add(options) {
-                        return Err(EvalexprError::CustomMessage(format!("{}",er.to_string())));
+                        return Err(self.error_resp(format!("{}",er.to_string())));
                     }
                 } else {
-                    return Err(chk.err().unwrap());
+                    return Err(self.error_resp(chk.err().unwrap().to_string()));
                 }
                 Ok(().into())
             }),
@@ -52,35 +56,63 @@ impl Query {
                 let x = async {
                     if let Ok(arguments) = chk {
                         if let Err(er) = self.db.drop(arguments[0].as_str()).await {
-                            return Err(EvalexprError::CustomMessage(format!("{}",er.to_string())));
+                            return Err(self.error_resp(format!("{}",er.to_string())));
                         }
                     } else {
-                        return Err(chk.err().unwrap());
+                        return Err(self.error_resp(chk.err().unwrap().to_string()));
                     }
                     Ok(().into())
                 };
                 futures::executor::block_on(x)
             }),
             "upsert" => Function::new(|args|{
-                let chk = self.check_col_name(args, 1);
+                let chk = self.check_col_name(args, 2);
                 let x = async {
                     if let Ok(arguments) = chk {
-
+                        if let Ok(json) = QueryBased::from_str(arguments[1].as_str()) {
+                            if let Ok(collection) = self.col(arguments[0].as_str()) {
+                                let id = collection.id();
+                                if let Ok(ttk) = collection.put(id.clone(), json).await {
+                                    return Ok(self.action_resp(format!("success!") ,ttk));
+                                } else {
+                                    return Err(self.error_resp(format!("failed to insert")));
+                                }
+                            } else {
+                                return Err(self.error_resp(format!("collection not found")));
+                            }
+                        } else {
+                            return Err(self.error_resp(format!("malformed data")));
+                        }
                     } else {
-                        return Err(chk.err().unwrap());
+                        return Err(self.error_resp(format!("{}",chk.err().unwrap().to_string())));
                     }
-                    Ok(().into())
                 };
                 futures::executor::block_on(x)
             }),
             "upsertWhere" => Function::new(|args|{
-                let chk = self.check_col_name(args, 1);
+                let chk = self.check_col_name(args, 2);
+                let (sx, rx) = futures::channel::mpsc::unbounded();
                 let x = async {
                     if let Ok(arguments) = chk {
-
+                        if let Ok(json) = QueryBased::from_str(arguments[1].as_str()) {
+                            if let Ok(collection) = self.col(arguments[0].as_str()) {
+                                collection.iter().for_each(|kv| {
+                                    futures::executor::block_on(async {
+                                        if let Ok(_) = eval_with_context(arguments[1].as_str(),&self.data_context_filter(&kv.data)) {
+                                            let key = kv.key();
+                                            if let Err(err) = collection.put(key.clone(), json.clone()).await {
+                                                sx.unbounded_send(key.to_string()).expect("failed to send");
+                                            }
+                                        }
+                                    });
+                                });
+                            }
+                        }
                     } else {
-                        return Err(chk.err().unwrap());
+                        return Err(self.error_resp(format!("{}",chk.err().unwrap().to_string())));
                     }
+                    let v = rx.collect::<String>();
+
                     Ok(().into())
                 };
                 futures::executor::block_on(x)
@@ -145,7 +177,7 @@ impl Query {
                 };
                 futures::executor::block_on(x)
             }),
-            "deleteTag" => Function::new(|args|{
+            "deleteClip" => Function::new(|args|{
                 let chk = self.check_col_name(args, 1);
                 let x = async {
                     if let Ok(arguments) = chk {
@@ -187,7 +219,7 @@ impl Query {
                 }
                 Ok(().into())
             }),
-            "getTag" => Function::new(|args|{
+            "getClip" => Function::new(|args|{
                 if let Ok(arguments) = args.as_fixed_len_tuple(2) {
                     println!("{:?}",arguments);
                 }
@@ -202,7 +234,7 @@ impl Query {
         }
     }
 
-    fn data_context_filter(&'static self, json: &SerdeValue) -> HashMapContext {
+    fn data_context_filter(&self, json: &SerdeValue) -> HashMapContext {
         let data_map = json.clone();
         let data_array_map = json.clone();
         let data_array_filter = json.clone();
@@ -363,5 +395,17 @@ impl Query {
         } else {
             Err(EvalexprError::TypeError { actual: args.clone(), expected: vec![ValueType::String] })
         }
+    }
+
+    fn action_resp(&self, message: String, time_taken: String) -> Value {
+        Value::String(StrToJson(&ActionResult{ error: false, message, time_taken }).unwrap())
+    }
+
+    fn error_resp(&self, message: String) -> EvalexprError {
+        EvalexprError::CustomMessage(message)
+    }
+
+    fn query_resp<T>(&self, res: FuncResult<T>) -> Value where for<'a> T: Serialize + Deserialize<'a> {
+        Value::String(StrToJson(&res).unwrap())
     }
 }
