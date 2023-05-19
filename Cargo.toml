@@ -9,7 +9,7 @@ exclude = [
     ".idea",
     ".github"
 ]
-keywords = ["flql","flinch","dql","database","ram","in-memory","memory","caching"]
+keywords = ["flinch","database","in-memory","memory","caching"]
 license = "Apache-2.0"
 repository = "https://github.com/mjm918/flinch"
 
