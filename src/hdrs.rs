@@ -46,12 +46,6 @@ pub enum FuncType {
     Query(String)
 }
 
-#[derive(PartialEq)]
-pub enum DataTypes {
-    String,
-    Number
-}
-
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FuncResult<T> {
     pub query: FuncType,

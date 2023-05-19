@@ -1,10 +1,5 @@
-use anyhow::Result;
-use std::sync::Arc;
 use evalexpr::*;
-use serde_json::{Value as SerdeValue, from_str as JsonFromStr, to_string as StrToJson};
-use crate::db::{CollectionOptions, Database};
-use crate::docv::QueryBased;
-use crate::err::QueryError;
+use serde_json::{Value as SerdeValue, from_str as JsonFromStr};
 use crate::qry::Query;
 
 impl Query {
@@ -15,7 +10,12 @@ impl Query {
         let context = context_map! {
             "map" => Function::new(move |args|{
                 if let Ok(first) = args.as_string() {
-                    return Ok(Self::map(&data_map, &first));
+                    let v = Self::map(&data_map, &first);
+                    if v.is_some() {
+                        return Ok(v.unwrap());
+                    } else {
+                        return Err(EvalexprError::CustomMessage("no item found".to_owned()));
+                    }
                 }
                 Err(EvalexprError::type_error(args.clone(),vec![ValueType::String, ValueType::Tuple]))
             }),
@@ -57,11 +57,14 @@ impl Query {
                     let pointers = format!("/{}",first.replace(".","/"));
                     let pointers = pointers.split("$").collect::<Vec<&str>>();
                     let pointer_value = Self::array_map(&data_array_map, pointers);
-                    return Ok(Value::String(serde_json::to_string(&pointer_value).unwrap()));
+                    if pointer_value.len() > 0 {
+                        return Ok(Value::String(serde_json::to_string(&pointer_value).unwrap()));
+                    } else {
+                        return Err(EvalexprError::CustomMessage("no result found".to_owned()));
+                    }
                 } else {
                     return Err(EvalexprError::type_error(Value::String(args.to_string()), vec![ValueType::String]));
                 }
-                Err(EvalexprError::type_error(args.clone(),vec![ValueType::String]))
             })
         }.unwrap();
 
@@ -85,24 +88,26 @@ impl Query {
         }
         return vec![];
     }
-    fn map(json: &SerdeValue, subject: &String) -> Value {
+
+    fn map(json: &SerdeValue, subject: &String) -> Option<Value> {
         let pointer = format!("/{}",subject.replace(".","/"));
         if let Some(v) = json.pointer(pointer.as_str()) {
             if let Some(str) = v.as_str() {
-                return Value::from(str);
-            }
-            if let Some(num) = v.as_f64() {
-                return Value::from(num);
+                return Some(Value::from(str));
             }
             if let Some(num) = v.as_i64() {
-                return Value::from(num);
+                return Some(Value::from(num));
+            }
+            if let Some(num) = v.as_f64() {
+                return Some(Value::from(num));
             }
             if let Some(varr) = v.as_array() {
-                return Value::from(serde_json::to_string(varr).unwrap());
+                return Some(Value::from(serde_json::to_string(varr).unwrap()));
             }
         }
-        Value::Empty
+        None
     }
+
     fn includes(array: &Vec<SerdeValue>, second: &Value) -> bool {
         for item in array {
             if second.is_string() {
@@ -114,15 +119,15 @@ impl Query {
                     }
                 }
             }
-            if let Ok(rhs) = second.as_float() {
-                if let Some(lhs) = item.as_f64() {
+            if let Ok(rhs) = second.as_int() {
+                if let Some(lhs) = item.as_i64() {
                     if rhs.eq(&lhs) {
                         return true;
                     }
                 }
             }
-            if let Ok(rhs) = second.as_int() {
-                if let Some(lhs) = item.as_i64() {
+            if let Ok(rhs) = second.as_float() {
+                if let Some(lhs) = item.as_f64() {
                     if rhs.eq(&lhs) {
                         return true;
                     }

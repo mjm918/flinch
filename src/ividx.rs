@@ -113,7 +113,9 @@ impl<K> InvertedIndex<K>
     }
 
     pub fn clear(&self) {
-        self.kv.clear();
+        self.kv.par_iter().for_each(|kv|{
+            self.kv.remove(kv.key());
+        });
         self.kv.shrink_to_fit();
     }
 }

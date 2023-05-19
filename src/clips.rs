@@ -2,7 +2,7 @@ use std::hash::Hash;
 use dashmap::{DashMap, DashSet};
 use dashmap::rayon::map::Iter;
 use dashmap::mapref::one::{Ref};
-use rayon::prelude::IntoParallelRefIterator;
+use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use crate::doc::Document;
@@ -97,7 +97,9 @@ where K: Serialize +
     }
 
     pub fn clear(&self) {
-        self.kv.clear();
+        self.kv.par_iter().for_each(|kv|{
+            self.kv.remove(kv.key());
+        });
         self.kv.shrink_to_fit();
     }
 }

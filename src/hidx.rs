@@ -61,7 +61,9 @@ impl<K> HashIndex<K>
     }
 
     pub fn clear(&self) {
-        self.kv.clear();
+        for kv in &self.kv {
+            self.kv.remove(kv.key());
+        }
         self.kv.shrink_to_fit();
     }
 }

@@ -4,15 +4,13 @@ use rayon::prelude::*;
 use evalexpr::eval_with_context;
 use flql::Flql;
 use futures::executor::{block_on};
-use futures::StreamExt;
 use serde_json::{Number, Value};
-use crate::col::Collection;
 use crate::db::{CollectionOptions, Database};
 use crate::doc::Document;
 use crate::docv::QueryBased;
 use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
-use crate::hdrs::{ActionResult, FlinchError, FuncResult};
-use crate::utils::trim_col_name;
+use crate::hdrs::{ActionResult, FlinchError};
+use crate::utils::{trim_apos, trim_cond};
 
 pub struct Query {
     db: Database<String, QueryBased>
@@ -54,7 +52,7 @@ impl Query {
             }
             Flql::Exists(pointer,collection) => {
                 let ttk = Instant::now();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -63,7 +61,7 @@ impl Query {
                     };
                 }
                 let col = col.unwrap();
-                
+                let ttk = Instant::now();
                 let exi = col.get(&pointer);
                 let res = if exi.data.is_some() {
                     let data = exi.data.unwrap();
@@ -79,7 +77,7 @@ impl Query {
             }
             Flql::Length(collection) => {
                 let ttk = Instant::now();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -88,7 +86,7 @@ impl Query {
                     };
                 }
                 let col = col.unwrap();
-                
+                let ttk = Instant::now();
                 ActionResult{
                     data: vec![Value::Number(Number::from(col.len()))],
                     error: FlinchError::None,
@@ -105,7 +103,7 @@ impl Query {
                         time_taken: format!("{:?}",ttk.elapsed()),
                     };
                 }
-                let col = self.db.using(trim_col_name(&collection).as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -114,7 +112,7 @@ impl Query {
                     };
                 }
                 let col = col.unwrap();
-
+                let ttk = Instant::now();
                 let id = col.id();
                 let x = col.put(id.clone(), qdata.unwrap()).await;
                 ActionResult{
@@ -133,7 +131,7 @@ impl Query {
                         time_taken: format!("{:?}",ttk.elapsed()),
                     };
                 }
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -143,14 +141,14 @@ impl Query {
                 }
                 let qdata = qdata.unwrap();
                 let col = col.unwrap();
-                
+                let ttk = Instant::now();
                 let sg = SegQueue::new();
                 col.iter().for_each(|kv|{
                     let pair = kv.pair();
                     let v = pair.1.document();
                     let k = pair.0;
-                    let ctx = eval_with_context(condition.as_str(), &Self::data_context_filter(&v));
-                    if ctx.is_ok() {
+                    let ctx = eval_with_context(trim_cond(&condition).as_str(), &Self::data_context_filter(&v));
+                    if ctx.is_ok() && ctx.unwrap().as_boolean().unwrap() {
                         let x = block_on(async {
                             col.put(k.clone(), qdata.clone()).await
                         });
@@ -176,7 +174,7 @@ impl Query {
                         time_taken: format!("{:?}",ttk.elapsed()),
                     };
                 }
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -186,6 +184,7 @@ impl Query {
                 }
                 let qdata = qdata.unwrap();
                 let col = col.unwrap();
+                let ttk = Instant::now();
                 let x = col.put(pointer, qdata).await;
                 let mut time_taken = format!("{:?}",ttk.elapsed());
                 if x.is_ok() {
@@ -197,10 +196,9 @@ impl Query {
                     time_taken,
                 }
             }
-            Flql::Get(collection) => {
+            Flql::Search(query, collection) => {
                 let ttk = Instant::now();
-                let sg = SegQueue::new();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -209,7 +207,56 @@ impl Query {
                     };
                 }
                 let col = col.unwrap();
-                
+                let ttk = Instant::now();
+                let res = col.like_search(trim_cond(&query).as_str());
+                let data = res.data.into_iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
+                ActionResult{
+                    data,
+                    error: FlinchError::None,
+                    time_taken: format!("{:?}",ttk.elapsed()),
+                }
+            }
+            Flql::SearchWhen(condition, query, collection) => {
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let ttk = Instant::now();
+                let res = col.like_search(trim_cond(&query).as_str());
+                let data = res.data.into_iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
+                let sg = SegQueue::new();
+                data.par_iter().for_each(|v|{
+                    let ctx = eval_with_context(trim_cond(&condition).as_str(), &Self::data_context_filter(&v));
+                    if ctx.is_ok() && ctx.unwrap().as_boolean().unwrap() {
+                        sg.push(v.clone());
+                    }
+                });
+                let data = sg.into_iter().collect();
+                ActionResult{
+                    data,
+                    error: FlinchError::None,
+                    time_taken: format!("{:?}",ttk.elapsed()),
+                }
+            }
+            Flql::Get(collection) => {
+                let ttk = Instant::now();
+                let sg = SegQueue::new();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let ttk = Instant::now();
                 col.iter().for_each(|kv|{
                     let pair = kv.pair();
                     sg.push(pair.1.document().clone());
@@ -222,7 +269,7 @@ impl Query {
             }
             Flql::GetWhen(condition, collection) => {
                 let ttk = Instant::now();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -231,13 +278,13 @@ impl Query {
                     };
                 }
                 let col = col.unwrap();
-                
+                let ttk = Instant::now();
                 let sg = SegQueue::new();
                 col.iter().for_each(|kv|{
                     let pair = kv.pair();
                     let v = pair.1.document();
-                    let ctx = eval_with_context(condition.as_str(), &Self::data_context_filter(&v));
-                    if ctx.is_ok() {
+                    let ctx = eval_with_context(trim_cond(&condition).as_str(), &Self::data_context_filter(v));
+                    if ctx.is_ok() && ctx.unwrap().as_boolean().unwrap() {
                         sg.push(v.clone());
                     }
                 });
@@ -249,7 +296,7 @@ impl Query {
             }
             Flql::GetPointer(pointer, collection) => {
                 let ttk = Instant::now();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -260,7 +307,6 @@ impl Query {
                 let col = col.unwrap();
                 
                 let v = col.get(&pointer);
-
                 let mut time_taken = format!("{:?}",ttk.elapsed());
                 let mut res = vec![];
                 if v.data.is_some() {
@@ -277,7 +323,7 @@ impl Query {
             }
             Flql::GetView(view, collection) => {
                 let ttk = Instant::now();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -308,7 +354,7 @@ impl Query {
             }
             Flql::GetClip(clip, collection) => {
                 let ttk = Instant::now();
-                let col = self.db.using(collection.as_str());
+                let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -317,9 +363,8 @@ impl Query {
                     };
                 }
                 let col = col.unwrap();
-                
+                let ttk = Instant::now();
                 let c = col.fetch_clip(clip.as_str());
-
                 let time_taken = format!("{:?}",ttk.elapsed());
 
                 let data = c.data;
@@ -334,39 +379,135 @@ impl Query {
                     time_taken,
                 }
             }
+            Flql::GetIndex(index, collection) => {
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let ttk = Instant::now();
+                let x = col.get_index(trim_cond(&index).as_str());
+                let mut data = vec![];
+                if x.data.is_some() {
+                    let y = x.data.unwrap();
+                    data.push(y.1.document().clone());
+                }
+                ActionResult{
+                    data,
+                    error: FlinchError::None,
+                    time_taken: format!("{:?}",ttk.elapsed()),
+                }
+            }
+            Flql::GetRange(start, end, on, collection) => {
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let ttk = Instant::now();
+                let res = col.fetch_range(trim_cond(&on).as_str(), trim_cond(&start), trim_cond(&end));
+                let data = res.data.iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
+                ActionResult{
+                    data,
+                    error: FlinchError::None,
+                    time_taken: format!("{:?}",ttk.elapsed()),
+                }
+            }
             Flql::Delete(collection) => {
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let ttk = Instant::now();
+                let _ = col.drop().await;
                 ActionResult{
                     data: vec![],
                     error: FlinchError::None,
-                    time_taken: "".to_string(),
+                    time_taken: format!("{:?}",ttk.elapsed())
                 }
             }
             Flql::DeleteWhen(condition, collection) => {
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let sg = SegQueue::new();
+                let ttk = Instant::now();
+                col.iter().for_each(|kv|{
+                    let pair = kv.pair();
+                    let v = pair.1.document();
+                    let ctx = eval_with_context(trim_cond(&condition).as_str(), &Self::data_context_filter(&v));
+                    if ctx.is_ok() && ctx.unwrap().as_boolean().unwrap() {
+                        let k = pair.0;
+                        let _ = block_on(async{
+                            col.delete(k.to_string()).await;
+                            sg.push(k.to_string());
+                        });
+                    }
+                });
+                let res = sg.into_iter().map(|s|Value::String(s)).collect::<Vec<Value>>();
                 ActionResult{
-                    data: vec![],
+                    data: res,
                     error: FlinchError::None,
-                    time_taken: "".to_string(),
+                    time_taken: format!("{:?}",ttk.elapsed()),
                 }
             }
             Flql::DeletePointer(pointer, collection) => {
-                ActionResult{
-                    data: vec![],
-                    error: FlinchError::None,
-                    time_taken: "".to_string(),
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
                 }
-            }
-            Flql::DeleteView(view, collection) => {
+                let col = col.unwrap();
+                let x = col.delete(pointer.to_string()).await;
                 ActionResult{
-                    data: vec![],
+                    data: vec![Value::String(pointer)],
                     error: FlinchError::None,
-                    time_taken: "".to_string(),
+                    time_taken: x,
                 }
             }
             Flql::DeleteClip(clip, collection) => {
+                let ttk = Instant::now();
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let x = col.delete_by_clip(clip.as_str()).await;
                 ActionResult{
-                    data: vec![],
+                    data: vec![Value::String(clip)],
                     error: FlinchError::None,
-                    time_taken: "".to_string(),
+                    time_taken: x,
                 }
             }
             Flql::None => {

@@ -272,17 +272,25 @@ where K: Serialize
         let exec = ExecTime::new();
         let words: Vec<&str> = text.split_whitespace().collect();
         let keys = self.inverted_idx.w_find(words);
-        let res = ArrayQueue::new(keys.len());
-        keys.par_iter().for_each(|key|{
-            if let Some(kv) = self.kv.get(key) {
-                let pair = kv.pair();
-                let _ = res.push((pair.0.clone(), pair.1.clone()));
+        if keys.len() > 0 {
+            let res = ArrayQueue::new(keys.len());
+            keys.par_iter().for_each(|key|{
+                if let Some(kv) = self.kv.get(key) {
+                    let pair = kv.pair();
+                    let _ = res.push((pair.0.clone(), pair.1.clone()));
+                }
+            });
+            FuncResult {
+                query: FuncType::LikeSearch(text),
+                data: res,
+                time_taken: exec.done()
             }
-        });
-        FuncResult {
-            query: FuncType::LikeSearch(text),
-            data: res,
-            time_taken: exec.done()
+        } else {
+            FuncResult {
+                query: FuncType::LikeSearch(text),
+                data: ArrayQueue::new(1),
+                time_taken: exec.done()
+            }
         }
     }
 

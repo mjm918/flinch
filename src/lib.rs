@@ -28,7 +28,6 @@ mod ops;
 ///
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use std::time::Instant;
     use serde::{Deserialize, Serialize};
     use crate::doc::{Document, ViewConfig};
@@ -106,6 +105,10 @@ mod tests {
         assert_ne!(multi.data.len(),0);
         println!("multi:: {:?}",multi.time_taken);
 
+        let gidx = collection.get_index("julfikar100");
+        assert!(gidx.data.is_some());
+        println!("index:: {:?} {:?}",gidx.time_taken,gidx.data.unwrap().1.data);
+
         let search = collection.search("Julfikar0");
         assert_ne!(search.data.len(),0);
         println!("search index:: {} res {}",search.time_taken, search.data.len());
@@ -167,7 +170,7 @@ mod tests {
         println!("new::collection::error {:?}",res.error);
 
         let insert = Instant::now();
-        let record_size = 10_000;
+        let record_size = 2;
         for i in 0..record_size {
             let v = serde_json::to_string(
                 &User {
@@ -179,5 +182,17 @@ mod tests {
             let x = planner.exec(query.as_str()).await;
             assert_eq!(x.error, FlinchError::None);
         }
+
+        let res = planner.exec(format!("get.when(:map(\"name\") == \"julfikar1\":).from('{}');",&COLLECTION).as_str()).await;
+        println!("{:?}",res);
+
+        let res = planner.exec(format!("get.index('julfikar1').from('{}');",&COLLECTION).as_str()).await;
+        println!("{:?}",res);
+
+        let res = planner.exec(format!("search.query('julfikar 1').from('{}');",&COLLECTION).as_str()).await;
+        println!("{:?}",res);
+
+        let res = planner.exec(format!("search.when(:map(\"age\") == 0:).query('julfikar').from('{}');",&COLLECTION).as_str()).await;
+        println!("{:?}",res);
     }
 }
