@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
+use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
 
 #[allow(dead_code)]
 pub enum WatcherState {
@@ -58,10 +59,20 @@ pub struct FuncResult<T> {
     pub time_taken: String
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum FlinchError {
+    QueryError(QueryError),
+    CollectionError(CollectionError),
+    DocumentError(DocumentError),
+    CustomError(String),
+    IndexError(IndexError),
+    None
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ActionResult {
-    pub error: bool,
-    pub message: String,
+    pub data: Vec<Value>,
+    pub error: FlinchError,
     pub time_taken: String
 }
 

@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 use crate::doc::{Document, ViewConfig};
 use crate::err::{CollectionError};
 use crate::col::{Collection};
-use crate::docv::QueryBased;
-use crate::plnr::Planner;
-use crate::hdrs::ActionResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct CollectionOptions {
@@ -45,6 +42,10 @@ impl<K, D> Database<K, D>
         }
     }
 
+    pub fn ls(&self) -> Vec<String> {
+        self.storage.iter().map(|kv|kv.key().to_string()).collect::<Vec<String>>()
+    }
+
     pub fn add(&self, opts: CollectionOptions) -> Result<(), CollectionError> {
         if opts.name.is_none() {
             return Err(CollectionError::OptionsProvidedAreNotValid);
@@ -57,7 +58,7 @@ impl<K, D> Database<K, D>
         Ok(())
     }
 
-    pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
+    pub async fn drop_c(&self, name: &str) -> Result<(), CollectionError> {
         if let Err(err) = self.exi(name) {
             return Err(err);
         }
@@ -81,17 +82,5 @@ impl<K, D> Database<K, D>
             return Err(CollectionError::DuplicateCollection);
         }
         Ok(())
-    }
-}
-
-pub struct DatabaseWithQuery {
-    pub planner: Planner
-}
-
-impl DatabaseWithQuery {
-    pub fn new() -> Self {
-        Self {
-            planner: Planner::new(Database::<String, QueryBased>::init())
-        }
     }
 }

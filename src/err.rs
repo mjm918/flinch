@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Serialize, Deserialize, Error, Clone, Debug)]
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
 pub enum IndexError {
     #[error("document already exists in index")]
     DuplicateDocument,
@@ -9,7 +9,7 @@ pub enum IndexError {
     NoSuchIndex,
 }
 
-#[derive(Serialize, Deserialize, Error, Clone, Debug)]
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
 pub enum DocumentError {
     #[error("string cannot be converted to document")]
     StringParseError,
@@ -19,7 +19,7 @@ pub enum DocumentError {
     DocumentParseError
 }
 
-#[derive(Serialize, Deserialize, Error, Clone, Debug)]
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
 pub enum WatcherError {
     #[error("sender not found")]
     SenderNotFound,
@@ -27,7 +27,7 @@ pub enum WatcherError {
     SendersRepetitive,
 }
 
-#[derive(Serialize, Deserialize, Error, Clone, Debug)]
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
 pub enum CollectionError {
     #[error("collection already exists")]
     DuplicateCollection,
@@ -37,7 +37,7 @@ pub enum CollectionError {
     OptionsProvidedAreNotValid
 }
 
-#[derive(Serialize, Deserialize, Error, Clone, Debug)]
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
 pub enum QueryError {
     #[error("query parse error `{0}`")]
     ParseError(String),
@@ -45,6 +45,8 @@ pub enum QueryError {
     CollectionExists(String),
     #[error("collection `{0}` does not exist")]
     CollectionNotExists(String),
+    #[error("error on collection `{0}`")]
+    CollectionError(CollectionError),
     #[error("configuration parse error `{0}`")]
     ConfigureParseError(String),
     #[error("upsert error `{0}`")]

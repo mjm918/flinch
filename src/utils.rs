@@ -48,3 +48,7 @@ pub fn tokenize(query: &String) -> Vec<String> {
         .map(|char| char.to_string())
         .collect::<Vec<_>>()
 }
+
+pub fn trim_col_name(name: &String) -> String {
+    name.trim_matches('\'').to_string()
+}

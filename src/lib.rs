@@ -12,7 +12,8 @@ pub mod col;
 pub mod db;
 mod utils;
 mod docv;
-mod plnr;
+mod qry;
+mod ops;
 
 ///
 /// Examples
@@ -27,12 +28,14 @@ mod plnr;
 ///
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::time::Instant;
     use serde::{Deserialize, Serialize};
     use crate::doc::{Document, ViewConfig};
-    use crate::db::{CollectionOptions, Database, DatabaseWithQuery};
+    use crate::db::{CollectionOptions, Database};
     use crate::docv::QueryBased;
-    use crate::hdrs::{ActionType, PubSubEvent};
+    use crate::hdrs::{ActionType, FlinchError, PubSubEvent};
+    use crate::qry::Query;
 
     const COLLECTION: &str = "demo";
     #[derive(Serialize, Deserialize)]
@@ -40,7 +43,7 @@ mod tests {
         name: String,
         age: i64
     }
-    #[tokio::test]
+    // #[tokio::test]
     async fn library() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
@@ -56,6 +59,8 @@ mod tests {
         };
         let database = Database::init();
         database.add(col_opts).expect("created new collection");
+
+        println!("ls Collections {:?}", database.ls());
 
         let instance = database.using(COLLECTION);
         assert!(instance.is_ok());
@@ -81,6 +86,17 @@ mod tests {
         }
         assert_eq!(collection.len(),record_size as usize);
         println!("insert:: {:?}",insert.elapsed());
+
+        let x = collection.put(format!("P_{}",0), QueryBased::from_str(
+            serde_json::to_string(
+                &User {
+                    name: format!("julfikar-replace"),
+                    age: 10000,
+                }
+            ).unwrap().as_str()
+        ).unwrap()).await;
+        assert!(x.is_ok());
+        println!("replaced value in {}",x.unwrap());
 
         let single = collection.get(&format!("P_0"));
         assert!(single.data.is_some());
@@ -130,7 +146,8 @@ mod tests {
             }
         }
     }
-    // #[tokio::test]
+
+    #[tokio::test]
     async fn query() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
@@ -144,13 +161,23 @@ mod tests {
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
         };
-        let instance = DatabaseWithQuery::new();
-        let database = instance.planner;
-        let x = database.exec(format!("create collection -> {};",serde_json::to_string(&col_opts).unwrap()).as_str());
-        println!("{:?}",x);
+        let options = serde_json::to_string(&col_opts).unwrap();
+        let planner = Query::new();
+        let res = planner.exec(format!("new({});",options.as_str()).as_str()).await;
+        println!("new::collection::error {:?}",res.error);
 
-        /*let ttk = Instant::now();
-        let planner = session.query(r#"{"$set":{"document":[{"a":"1"}],"filter":{"product":1}}}"#);
-        println!("{} hmm...{:?}",planner.is_ok(), ttk.elapsed());*/
+        let insert = Instant::now();
+        let record_size = 10_000;
+        for i in 0..record_size {
+            let v = serde_json::to_string(
+                &User {
+                    name: format!("julfikar{}",&i),
+                    age: i,
+                }
+            ).unwrap();
+            let query = format!("put({}).into('{}');", v, &COLLECTION);
+            let x = planner.exec(query.as_str()).await;
+            assert_eq!(x.error, FlinchError::None);
+        }
     }
 }
