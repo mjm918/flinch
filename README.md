@@ -20,30 +20,65 @@ Refer to [lib.rs](src%2Flib.rs)
 
 # Query Example
 
- ```
-    CREATE collection -> {};
+> Create collection <br>
+`new({});` <br>
 
-    DROP collection;
-    
-    LEN collection;
-    
-    UPSERT collection [{"avc":"1123"}];
-    
-    UPSERT collection {"avc":"1123"} WHERE $or:[{"$eq":{"a.b":1}}] $and:[{"$lt":{"a":3}}];
-    
-    PUT collection -> id -> {};
-    
-    EXISTS collection -> id;
-    
-    SEARCH collection -> 'your random query' OFFSET 0 LIMIT 1000000;
-    
-    GET collection WHERE {} SORT id DESC OFFSET 0 LIMIT 1000000;
-    
-    GET collection WHERE $or:[{"$eq":{"a.b":3}},{"$lt":{"b":3}}] OFFSET 0 LIMIT 1000000;
-    
-    GET collection -> id;
-    
-    DELETE collection -> id;
-    
-    DELETE collection WHERE $or:[{"$eq":{"a.b":1}}] $and:[{"$lt":{"a":3}}];
- ```
+> Drop collection <br>
+`drop('');` <br>
+
+> Check if pointer exists in collection <br>
+`exists('').into('');` <br>
+
+> Length of collection <br>
+`length('');` <br>
+
+> Update or Insert into collection <br>
+`put({}).into('');` <br>
+
+> Conditional Update or Insert into collection <br>
+`put({}).when(:includes(array_filter('e.f$.g'),2):).into('');` <br>
+
+> Update or Insert into collection to a Pointer <br>
+`put({}).pointer('').into('');` <br>
+
+> Get from collection <br>
+`get.from('');` <br>
+
+> Conditional Get from collection <br>
+`get.when(:includes(array_filter('e.f$.g'),2):).from('');` <br>
+
+> Get Pointer from collection <br>
+`get.pointer('').from('');` <br>
+
+> Get View from collection <br>
+`get.view('').from('');` <br>
+
+> Get Clip from collection <br>
+`get.clip('').from('');` <br>
+
+> Get index from collection <br>
+`get.index('').from('');` <br>
+
+> Get range from collection <br>
+`get.range(start:'', end:'', on:'').from('');` <br>
+
+> Search query <br>
+`search.query('').from('');` <br>
+
+> Conditional Search query <br>
+`search.when(#func(args)#).query('').from('');` <br>
+
+> Delete from collection <br>
+`delete.from('');` <br>
+
+> Conditional Delete from collection <br>
+`delete.when(:includes(array_filter('e.f$.g'),2):).from('');` <br>
+
+> Delete Pointer from collection <br>
+`delete.pointer('').from('');` <br>
+
+> Delete View from collection <br>
+`delete.view('').from('');` <br>
+
+>Delete Clip from collection <br>
+`delete.clip('').from('');` <br>

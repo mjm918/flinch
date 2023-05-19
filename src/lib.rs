@@ -42,7 +42,7 @@ mod tests {
         name: String,
         age: i64
     }
-    // #[tokio::test]
+    #[tokio::test]
     async fn library() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
@@ -169,7 +169,6 @@ mod tests {
         let res = planner.exec(format!("new({});",options.as_str()).as_str()).await;
         println!("new::collection::error {:?}",res.error);
 
-        let insert = Instant::now();
         let record_size = 2;
         for i in 0..record_size {
             let v = serde_json::to_string(
