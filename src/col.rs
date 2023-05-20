@@ -7,8 +7,10 @@ use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use sled::Db;
 use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
+use crate::bkp::Bkp;
 use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
@@ -21,33 +23,26 @@ use crate::pbsb::PubSub;
 use crate::utils::ExecTime;
 use crate::wtch::Watchman;
 
-pub struct Collection<K, D: Document> {
-    kv: DashMap<K, D>,
-    hash_idx: HashIndex<K>,
-    inverted_idx: InvertedIndex<K>,
-    clips: Clips<K>,
-    range: Range<K>,
-    watchman: PubSub<PubSubEvent<K, D>>,
+pub struct Collection<D: Document> {
+    bkp: Bkp,
+    kv: DashMap<String, D>,
+    hash_idx: HashIndex<String>,
+    inverted_idx: InvertedIndex<String>,
+    clips: Clips<String>,
+    range: Range<String>,
+    watchman: PubSub<PubSubEvent<String, D>>,
     pub opts: CollectionOptions
 }
 pub type ExecutionTime = String;
-
-impl<K,D> Collection<K, D>
-where K: Serialize
-        + DeserializeOwned
-        + PartialOrd
-        + Ord
-        + PartialEq
-        + Eq
-        + Hash
-        + Clone
-        + Send
-        + Sync
-        + 'static,
+pub type K = String;
+impl<D> Collection< D>
+where
     D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document
 {
-    pub fn new(opts: CollectionOptions) -> Self {
+    pub fn new(db: &Db, opts: CollectionOptions) -> Self {
+        let option = opts.clone();
         Self {
+            bkp: Bkp::new(&db, option.name.unwrap().as_str()),
             kv: DashMap::new(),
             hash_idx: HashIndex::new(),
             inverted_idx: InvertedIndex::new(),
@@ -58,17 +53,28 @@ where K: Serialize
         }
     }
 
+    pub async fn load_bkp(&self) {
+        let res = self.bkp.fetch();
+        for kv in res {
+            let _ = self.put_internal(kv.0, kv.1, false).await;
+        }
+    }
+
     pub async fn sub(&self, sx: Sender<PubSubEvent<K,D>>) -> Result<(), PubSubRes> {
         let _ = self.watchman.notify(PubSubEvent::Subscribed(sx.clone())).await;
         self.watchman.reg(sx).await
     }
 
     pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, IndexError> {
+        self.put_internal(k, d, true).await
+    }
+
+    async fn put_internal(&self, k: K, d: D, bkp: bool) -> Result<ExecutionTime, IndexError> {
         let exec = ExecTime::new();
         let mut v = d;
         v.set_opts(&self.opts);
 
-        let query = ActionType::Insert(k.clone(), v.clone());
+        let query = ActionType::Insert(k.to_string(), v.clone());
         let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
 
         if !self.opts.index_opts.is_empty() {
@@ -92,8 +98,10 @@ where K: Serialize
         if !self.opts.range_opts.is_empty() {
             self.range.put(&k, &v);
         }
-        self.kv.insert(k, v);
-
+        self.kv.insert(k.to_string(), v.clone());
+        if bkp {
+            let _ = self.bkp.put(k.to_string(),v);
+        }
         Ok(exec.done())
     }
 
@@ -110,9 +118,10 @@ where K: Serialize
                 self.clips.delete_inner(&view, &k)
             }
             if let Some(content) = v.content() {
-                let _ = self.inverted_idx.delete(k.clone(), content).await;
+                let _ = self.inverted_idx.delete(k.to_string(), content).await;
             }
             self.clips.delete(&k, &v);
+            let _ = self.bkp.remove(k.to_string());
         }
         exec.done()
     }
@@ -139,7 +148,7 @@ where K: Serialize
         let exec = ExecTime::new();
         let mut res = Vec::with_capacity(keys.len());
         keys.iter().for_each(|k|{
-            if let Some(v) = self.kv.get(k){
+            if let Some(v) = self.kv.get(k.clone()){
                 let pair = v.pair();
                 res.push((pair.0.clone(), pair.1.clone()));
             }
@@ -157,7 +166,7 @@ where K: Serialize
         let q = format!("field {} from {} to {}", &field, &from, &to);
         for k in self.range.range(field, from, to) {
             if let Some(v) = self.kv.get(&k) {
-                res.push((k.clone(), v.clone()));
+                res.push((k.to_string(), v.clone()));
             }
         }
         FuncResult {
@@ -210,7 +219,7 @@ where K: Serialize
             Some(v) => {
                 let mut res = Vec::with_capacity(v.value().len());
                 for k in v.value().iter() {
-                    if let Some(kv) = self.kv.get(&k) {
+                    if let Some(kv) = self.kv.get(&k.clone()) {
                         let pair = kv.pair();
                         res.push((pair.0.clone(), pair.1.clone()));
                     }
@@ -232,7 +241,7 @@ where K: Serialize
             Some(v) => {
                 let mut res = Vec::with_capacity(v.value().len());
                 for k in v.value().iter() {
-                    if let Some(kd) = self.kv.get(&k) {
+                    if let Some(kd) = self.kv.get(&k.clone()) {
                         let pair = kd.pair();
                         res.push((pair.0.clone(), pair.1.document().clone()));
                     }
@@ -314,10 +323,14 @@ where K: Serialize
         Uuid::new_v4().as_hyphenated().to_string()
     }
 
-    pub async fn drop(&self) {
+    pub async fn drop_c(&self) {
         let local = self.kv.clone();
         for kv in local {
             self.delete(kv.0).await;
         }
+    }
+
+    pub async fn flush_bkp(&self) -> usize {
+        self.bkp.flush().await
     }
 }

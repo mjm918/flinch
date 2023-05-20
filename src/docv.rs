@@ -191,4 +191,8 @@ impl Document for QueryBased {
     fn document(&self) -> &Value {
         &self.data
     }
+
+    fn string(&self) -> String {
+        serde_json::to_string(self.document()).unwrap()
+    }
 }
