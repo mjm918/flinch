@@ -13,12 +13,12 @@ use crate::hdrs::{ActionResult, FlinchError};
 use crate::utils::{trim_apos, trim_cond};
 
 pub struct Query {
-    db: Database<String, QueryBased>
+    db: Database<QueryBased>
 }
 
 impl Query {
     pub fn new() -> Self {
-        Self { db: Database::<String, QueryBased>::init() }
+        Self { db: Database::<QueryBased>::init() }
     }
 
     pub async fn exec(&self, stmt: &str) -> ActionResult {
@@ -435,7 +435,7 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let _ = col.drop().await;
+                let _ = col.drop_c().await;
                 ActionResult{
                     data: vec![],
                     error: FlinchError::None,
