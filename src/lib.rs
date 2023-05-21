@@ -31,7 +31,7 @@ mod tests {
         name: String,
         age: i64
     }
-    // #[tokio::test]
+    #[tokio::test]
     async fn library() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
