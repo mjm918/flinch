@@ -1,7 +1,6 @@
 use std::time::Instant;
 use crossbeam_queue::SegQueue;
 use rayon::prelude::*;
-use evalexpr::eval_with_context;
 use flql::Flql;
 use futures::executor::{block_on};
 use serde_json::{Number, Value};

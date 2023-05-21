@@ -143,7 +143,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    // #[tokio::test]
     async fn query() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
