@@ -50,13 +50,13 @@ impl<D> Database<D>
         Ok(())
     }
 
-    pub async fn drop_c(&self, name: &str) -> Result<(), CollectionError> {
+    pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
         if let Err(err) = self.exi(name) {
             return Err(err);
         }
         let col = self.using(name);
         let col = col.unwrap();
-            col.value().drop_c().await;
+            col.value().empty().await;
         self.storage.remove(name);
 
         Ok(())

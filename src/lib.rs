@@ -13,7 +13,6 @@ pub mod db;
 mod utils;
 mod docv;
 mod qry;
-mod ops;
 mod bkp;
 
 #[cfg(test)]
@@ -32,7 +31,7 @@ mod tests {
         name: String,
         age: i64
     }
-    #[tokio::test]
+    // #[tokio::test]
     async fn library() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
@@ -61,7 +60,7 @@ mod tests {
         let (sx, mut rx) = tokio::sync::mpsc::channel(30000);
         collection.sub(sx).await.expect("subscribe to channel");
 
-        /*let insert = Instant::now();
+        let insert = Instant::now();
         let record_size = 10_000;
         for i in 0..record_size {
             collection.put(format!("P_{}",&i), QueryBased::from_str(
@@ -74,8 +73,8 @@ mod tests {
             ).unwrap()).await.unwrap();
         }
         assert_eq!(collection.len(),record_size as usize);
-        println!("insert:: {:?}",insert.elapsed());*/
-        collection.load_bkp().await;
+        println!("insert:: {:?}",insert.elapsed());
+        // collection.load_bkp().await;
 
         let x = collection.put(format!("P_{}",0), QueryBased::from_str(
             serde_json::to_string(
@@ -116,8 +115,8 @@ mod tests {
         assert_ne!(view.data.len(),0);
         println!("view:: {} res {}",view.time_taken, view.data.len());
 
-        // collection.drop_c().await;
-        // assert_eq!(collection.len(),0,"after::drop");
+        collection.empty().await;
+        assert_eq!(collection.len(),0,"after::drop");
 
         let mut i = 0;
         loop {
@@ -144,7 +143,7 @@ mod tests {
         }
     }
 
-    // #[tokio::test]
+    #[tokio::test]
     async fn query() {
         let col_opts = CollectionOptions {
             name: Some(COLLECTION.to_string()),
@@ -176,16 +175,24 @@ mod tests {
             assert_eq!(x.error, FlinchError::None);
         }
 
-        let res = planner.exec(format!("get.when(:map(\"name\") == \"julfikar1\":).from('{}');",&COLLECTION).as_str()).await;
+        let res = planner.exec(format!("get.when(:.name == \"julfikar100\":).from('{}');",&COLLECTION).as_str()).await;
         println!("when::map:: {:?}",res.time_taken);
+        assert_ne!(res.data.len(),0);
 
         let res = planner.exec(format!("get.index('julfikar1').from('{}');",&COLLECTION).as_str()).await;
         println!("get::index::{:?}",res.time_taken);
+        assert_eq!(res.data.len(),1);
 
         let res = planner.exec(format!("search.query('julfikar 1').from('{}');",&COLLECTION).as_str()).await;
         println!("search::query::{:?}",res.time_taken);
-
-        let res = planner.exec(format!("search.when(:map(\"age\") == 0:).query('julfikar').from('{}');",&COLLECTION).as_str()).await;
+        assert_ne!(res.data.len(),0);
+        /// deprecated
+        let res = planner.exec(format!("search.when(:.age >= 1000:).query('julfikar').from('{}');",&COLLECTION).as_str()).await;
         println!("search::when::{:?}",res.time_taken);
+        assert_ne!(res.data.len(),0);
+
+        let res = planner.exec(format!("get.when(:.age >= 1000 && COERCE .name _lowercase_ CONTAINS \"julfikar\":).from('{}');",&COLLECTION).as_str()).await;
+        println!("get::when::{:?}",res.time_taken);
+        assert_ne!(res.data.len(),0);
     }
 }

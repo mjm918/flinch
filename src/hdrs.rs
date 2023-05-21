@@ -55,6 +55,7 @@ pub struct FuncResult<T> {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum FlinchError {
+    ExpressionError(String),
     QueryError(QueryError),
     CollectionError(CollectionError),
     DocumentError(DocumentError),

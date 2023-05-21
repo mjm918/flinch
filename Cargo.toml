@@ -19,7 +19,7 @@ repository = "https://github.com/mjm918/flinch"
 anyhow = "1.0.70"
 evalexpr = { version="9.0.0", features=["serde_support","regex_support"] }
 futures = "0.3.28"
-flql = "0.1.4"
+flql = "0.1.8"
 tokio = { version="1.27.0", features=["full"] }
 crossbeam-queue = "0.3.8"
 dashmap = { version="5.4.0", features=["rayon", "serde"] }

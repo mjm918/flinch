@@ -323,7 +323,7 @@ where
         Uuid::new_v4().as_hyphenated().to_string()
     }
 
-    pub async fn drop_c(&self) {
+    pub async fn empty(&self) {
         let local = self.kv.clone();
         for kv in local {
             self.delete(kv.0).await;
