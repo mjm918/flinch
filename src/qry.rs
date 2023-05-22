@@ -9,7 +9,7 @@ use crate::doc::Document;
 use crate::docv::QueryBased;
 use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
 use crate::hdrs::{ActionResult, FlinchError};
-use crate::utils::{trim_apos, trim_cond};
+use crate::utils::{trim_apos};
 
 pub struct Query {
     db: Database<QueryBased>
@@ -110,6 +110,9 @@ impl Query {
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }
             }
+            Flql::Ttl(_duration,_condition,_collection) => {
+                unimplemented!()
+            }
             Flql::Put(data, collection) => {
                 let ttk = Instant::now();
                 let qdata = QueryBased::from_str(data.as_str());
@@ -140,7 +143,7 @@ impl Query {
             }
             Flql::PutWhen(data, condition, collection) => {
                 let ttk = Instant::now();
-                let expression = flql::expr_parse(trim_cond(&condition).as_str());
+                let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -225,26 +228,6 @@ impl Query {
                     time_taken,
                 }
             }
-            Flql::Search(query, collection) => {
-                let ttk = Instant::now();
-                let col = self.db.using(trim_apos(&collection).as_str());
-                if col.is_err() {
-                    return ActionResult{
-                        data: vec![],
-                        error: self.err_c(col.err()),
-                        time_taken: format!("{:?}",ttk.elapsed()),
-                    };
-                }
-                let col = col.unwrap();
-                let ttk = Instant::now();
-                let res = col.like_search(trim_cond(&query).as_str());
-                let data = res.data.into_iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
-                ActionResult{
-                    data,
-                    error: FlinchError::None,
-                    time_taken: format!("{:?}",ttk.elapsed()),
-                }
-            }
             Flql::SearchTyping(query, collection) => {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
@@ -257,54 +240,13 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let res = col.search(trim_cond(&query).as_str());
+                let res = col.search(trim_apos(&query).as_str());
                 let time_taken = format!("{:?}",ttk.elapsed());
                 let data = res.data.into_iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
                 ActionResult{
                     data,
                     error: FlinchError::None,
                     time_taken,
-                }
-            }
-            #[deprecated("in favor of get.when(), this function is deprecated")]
-            Flql::SearchWhen(condition, query, collection) => {
-                let ttk = Instant::now();
-                let expression = flql::expr_parse(trim_cond(&condition).as_str());
-                if expression.is_err() {
-                    return ActionResult{
-                        data: vec![],
-                        error: self.err_s(expression.err().unwrap().to_string()),
-                        time_taken: format!("{:?}",ttk.elapsed()),
-                    };
-                }
-                let col = self.db.using(trim_apos(&collection).as_str());
-                if col.is_err() {
-                    return ActionResult{
-                        data: vec![],
-                        error: self.err_c(col.err()),
-                        time_taken: format!("{:?}",ttk.elapsed()),
-                    };
-                }
-                let expression = expression.unwrap();
-                let col = col.unwrap();
-                let ttk = Instant::now();
-                let res = col.like_search(trim_cond(&query).as_str());
-                let data = res.data.into_iter().map(|kv|kv.1).collect::<Vec<QueryBased>>();
-                let sg = SegQueue::new();
-                data.par_iter().for_each(|v|{
-                    let d = expression.calculate(v.string().as_bytes());
-                    if d.is_ok() {
-                        let d = d.unwrap();
-                        if d == flql::exp_parser::Value::Bool(true) {
-                            sg.push(v.document().clone());
-                        }
-                    }
-                });
-                let data = sg.into_iter().collect();
-                ActionResult{
-                    data,
-                    error: FlinchError::None,
-                    time_taken: format!("{:?}",ttk.elapsed()),
                 }
             }
             Flql::Get(collection) => {
@@ -332,7 +274,7 @@ impl Query {
             }
             Flql::GetWhen(condition, collection) => {
                 let ttk = Instant::now();
-                let expression = flql::expr_parse(trim_cond(&condition).as_str());
+                let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
                     return ActionResult{
                         data: vec![],
@@ -466,7 +408,7 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let x = col.get_index(trim_cond(&index).as_str());
+                let x = col.get_index(trim_apos(&index).as_str());
                 let mut data = vec![];
                 if x.data.is_some() {
                     let y = x.data.unwrap();
@@ -490,7 +432,7 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let res = col.fetch_range(trim_cond(&on).as_str(), trim_cond(&start), trim_cond(&end));
+                let res = col.fetch_range(trim_apos(&on).as_str(), trim_apos(&start), trim_apos(&end));
                 let data = res.data.iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
                 ActionResult{
                     data,
@@ -519,7 +461,7 @@ impl Query {
             }
             Flql::DeleteWhen(condition, collection) => {
                 let ttk = Instant::now();
-                let expression = flql::expr_parse(trim_cond(&condition).as_str());
+                let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
                     return ActionResult{
                         data: vec![],

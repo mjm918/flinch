@@ -1,8 +1,6 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::Value;
 use sled::{Tree, Iter, IVec, Db};
-use tokio::sync::mpsc::Sender;
 use crate::doc::Document;
 
 pub struct Bkp {

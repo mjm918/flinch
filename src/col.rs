@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::hash::Hash;
 use crossbeam_queue::{ArrayQueue};
 use dashmap::{DashMap, DashSet};
 use dashmap::rayon::map::Iter;
@@ -42,7 +41,7 @@ where
     pub fn new(db: &Db, opts: CollectionOptions) -> Self {
         let option = opts.clone();
         Self {
-            bkp: Bkp::new(&db, option.name.unwrap().as_str()),
+            bkp: Bkp::new(&db, option.name.as_str()),
             kv: DashMap::new(),
             hash_idx: HashIndex::new(),
             inverted_idx: InvertedIndex::new(),
@@ -56,7 +55,7 @@ where
     pub async fn load_bkp(&self) {
         let res = self.bkp.fetch();
         for kv in res {
-            let _ = self.put_internal(kv.0, kv.1, false).await;
+            let _ = self._put(kv.0, kv.1, false).await;
         }
     }
 
@@ -66,22 +65,20 @@ where
     }
 
     pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, IndexError> {
-        self.put_internal(k, d, true).await
+        self._put(k, d, true).await
     }
 
-    async fn put_internal(&self, k: K, d: D, bkp: bool) -> Result<ExecutionTime, IndexError> {
+    async fn _put(&self, k: K, d: D, bkp: bool) -> Result<ExecutionTime, IndexError> {
         let exec = ExecTime::new();
         let mut v = d;
         v.set_opts(&self.opts);
 
-        let query = ActionType::Insert(k.to_string(), v.clone());
-        let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
-
         if !self.opts.index_opts.is_empty() {
             if let Err(_err) = self.hash_idx.put(&k, &v) {
-                return Err(IndexError::DuplicateDocument);
+                self.delete(k.clone()).await;
             }
         }
+
         if !self.opts.view_opts.is_empty() {
             if let Some(vw) = v.binding() {
                 self.clips.put_view(&vw, &k);
@@ -98,10 +95,15 @@ where
         if !self.opts.range_opts.is_empty() {
             self.range.put(&k, &v);
         }
+
         self.kv.insert(k.to_string(), v.clone());
         if bkp {
-            let _ = self.bkp.put(k.to_string(),v);
+            let _ = self.bkp.put(k.to_string(),v.clone());
         }
+
+        let query = ActionType::Insert(k.to_string(), v);
+        let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
+
         Ok(exec.done())
     }
 

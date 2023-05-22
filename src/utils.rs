@@ -49,7 +49,3 @@ pub fn tokenize(query: &String) -> Vec<String> {
 pub fn trim_apos(name: &String) -> String {
     name.trim_matches('\'').to_string()
 }
-
-pub fn trim_cond(cond: &String) -> String {
-    trim_apos(&cond.trim_matches(':').to_string())
-}

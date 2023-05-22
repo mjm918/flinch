@@ -92,7 +92,7 @@ impl<K> InvertedIndex<K>
         self.kv.par_iter().for_each(|rkv|{
             let kv = rkv.pair();
             let key = kv.0;
-            let mut counter = Arc::new(Mutex::new(0));
+            let counter = Arc::new(Mutex::new(0));
             words.par_iter().for_each(|word|{
                 let mut c = counter.lock().unwrap();
                 let token = word.to_lowercase();

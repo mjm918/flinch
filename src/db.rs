@@ -1,5 +1,4 @@
 use anyhow::{Result};
-use std::hash::Hash;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use serde::de::DeserializeOwned;
@@ -11,12 +10,12 @@ use crate::col::{Collection};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CollectionOptions {
-    pub name: Option<String>,
+    pub name: String,
     pub index_opts: Vec<String>,
     pub search_opts: Vec<String>,
     pub view_opts: Vec<ViewConfig>,
     pub range_opts: Vec<String>,
-    pub clips_opts: Vec<String>
+    pub clips_opts: Vec<String>,
 }
 
 pub struct Database<D> where D: Document {
@@ -39,10 +38,7 @@ impl<D> Database<D>
     }
 
     pub fn add(&self, opts: CollectionOptions) -> Result<(), CollectionError> {
-        if opts.name.is_none() {
-            return Err(CollectionError::OptionsProvidedAreNotValid);
-        }
-        let name = opts.name.as_ref().unwrap();
+        let name = &opts.name;
         if let Err(err) = self.exi(name.as_str()) {
             return Err(err);
         }
