@@ -1,4 +1,5 @@
 use std::time::{Duration, Instant};
+use crate::hdrs::{Sort, SortDirection};
 
 pub struct ExecTime {
     timer: Instant,
@@ -48,4 +49,37 @@ pub fn tokenize(query: &String) -> Vec<String> {
 
 pub fn trim_apos(name: &String) -> String {
     name.trim_matches('\'').to_string()
+}
+
+pub fn parse_sort(opt: Option<String>) -> Option<Sort> {
+    match opt {
+        None => {
+            None
+        }
+        Some(sort) => {
+            let tkns = sort.split(',').collect::<Vec<&str>>();
+            let field = tkns.get(0).unwrap().to_owned();
+            let direction = tkns.get(1).unwrap().to_owned();
+            let direction = match direction {
+                "ASC" => SortDirection::Asc,
+                "DESC" => SortDirection::Desc,
+                _ => SortDirection::Asc
+            };
+            Some(Sort{ field: trim_apos(&field.to_string()), direction })
+        }
+    }
+}
+
+pub fn parse_limit(opt: Option<String>) -> Option<(usize,usize)> {
+    match opt {
+        None => { None }
+        Some(ol) => {
+            let tkns = ol.split(',').collect::<Vec<&str>>();
+            let offset = tkns.get(0).unwrap().to_owned();
+            let offset = offset.parse::<usize>().unwrap();
+            let limit = tkns.get(1).unwrap().to_owned();
+            let limit = limit.parse::<usize>().unwrap();
+            Some((offset, limit))
+        }
+    }
 }

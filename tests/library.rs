@@ -27,7 +27,7 @@ mod tests {
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
         };
-        let database = Database::init();
+        let database: Database<QueryBased> = Database::init();
         database.add(col_opts).expect("created new collection");
 
         println!("ls Collections {:?}", database.ls());

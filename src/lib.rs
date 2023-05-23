@@ -8,8 +8,6 @@ mod pbsb;
 mod act;
 mod utils;
 mod bkp;
-mod ce;
-mod cache;
 
 pub mod doc;
 pub mod col;

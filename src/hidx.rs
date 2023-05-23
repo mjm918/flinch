@@ -34,10 +34,10 @@ impl<K> HashIndex<K>
         }
     }
 
-    pub fn put<D>(&self, k: &K, v: &D) -> Result<(), IndexError> where D: Document {
+    pub fn put<D>(&self, k: &K, v: &D) -> Result<(), (IndexError, String)> where D: Document {
         for key in v.keys().iter() {
             if let Some(_) = self.kv.get(key) {
-                return Err(IndexError::DuplicateDocument);
+                return Err((IndexError::DuplicateDocument, key.clone()));
             }
         }
         v.keys().into_iter().for_each(|idx| {

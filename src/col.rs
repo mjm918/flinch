@@ -1,13 +1,12 @@
 use anyhow::Result;
 use crossbeam_queue::{ArrayQueue};
 use dashmap::{DashMap, DashSet};
-use dashmap::rayon::map::Iter;
+use dashmap::rayon::map::{Iter};
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 use sled::Db;
-use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 use crate::bkp::Bkp;
 use crate::clips::Clips;
@@ -22,18 +21,20 @@ use crate::pbsb::PubSub;
 use crate::utils::ExecTime;
 use crate::wtch::Watchman;
 
-pub struct Collection<D: Document> {
-    bkp: Bkp,
-    kv: DashMap<String, D>,
-    hash_idx: HashIndex<String>,
-    inverted_idx: InvertedIndex<String>,
-    clips: Clips<String>,
-    range: Range<String>,
-    watchman: PubSub<PubSubEvent<String, D>>,
-    pub opts: CollectionOptions
-}
 pub type ExecutionTime = String;
 pub type K = String;
+
+pub struct Collection<D: Document> {
+    bkp: Bkp,
+    kv: DashMap<K, D>,
+    hash_idx: HashIndex<K>,
+    inverted_idx: InvertedIndex<K>,
+    clips: Clips<K>,
+    range: Range<K>,
+    watchman: PubSub<PubSubEvent<K, D>>,
+    pub opts: CollectionOptions
+}
+
 impl<D> Collection< D>
 where
     D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document
@@ -59,7 +60,7 @@ where
         }
     }
 
-    pub async fn sub(&self, sx: Sender<PubSubEvent<K,D>>) -> Result<(), PubSubRes> {
+    pub async fn sub(&self, sx: tokio::sync::mpsc::Sender<PubSubEvent<K,D>>) -> Result<(), PubSubRes> {
         let _ = self.watchman.notify(PubSubEvent::Subscribed(sx.clone())).await;
         self.watchman.reg(sx).await
     }
@@ -74,8 +75,12 @@ where
         v.set_opts(&self.opts);
 
         if !self.opts.index_opts.is_empty() {
-            if let Err(_err) = self.hash_idx.put(&k, &v) {
-                self.delete(k.clone()).await;
+            // FIXME: need to find a better way to handle this. if same index is found, apply upsert logic
+            if let Err((_err, key)) = self.hash_idx.put(&k, &v) {
+                if let Some((pointer, _value)) = self.get_index(key.as_str()).data {
+                    self.delete(pointer).await;
+                    let _ = self.hash_idx.put(&k, &v);
+                }
             }
         }
 
@@ -98,7 +103,7 @@ where
 
         self.kv.insert(k.to_string(), v.clone());
         if bkp {
-            let _ = self.bkp.put(k.to_string(),v.clone());
+            let _ = self.bkp.put(k.to_string(),v.clone()).await;
         }
 
         let query = ActionType::Insert(k.to_string(), v);

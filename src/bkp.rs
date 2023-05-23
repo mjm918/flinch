@@ -1,21 +1,26 @@
+use std::sync::Arc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sled::{Tree, Iter, IVec, Db};
+use tokio::task::JoinHandle;
 use crate::doc::Document;
 
 pub struct Bkp {
-    tree: Tree
+    tree: Arc<Tree>
 }
 
 impl Bkp {
     pub fn new(db: &Db, name: &str) -> Self {
-        let tree = db.open_tree(name).unwrap();
+        let tree = Arc::new(db.open_tree(name).unwrap());
         Self { tree }
     }
 
-    pub fn put<D>(&self, k: String, d: D) -> sled::Result<Option<IVec>> where
+    pub async fn put<D>(&self, k: String, d: D) -> JoinHandle<sled::Result<Option<IVec>>> where
         D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document {
-        self.tree.insert(k,IVec::from(d.string().as_str()))
+        let rt = self.tree.clone();
+        tokio::spawn(async move {
+            rt.insert(k,IVec::from(d.string().as_str()))
+        })
     }
 
     pub fn remove(&self, k: String) -> sled::Result<Option<IVec>> {
@@ -29,7 +34,7 @@ impl Bkp {
     pub fn fetch<D>(&self) -> Vec<(String, D)> where
         D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document {
         let mut res: Vec<(String, D)> = vec![];
-        for item in &self.tree {
+        for item in self.tree.iter() {
             let kv = item.unwrap();
             let k = String::from_utf8(kv.0.to_vec()).unwrap();
             let s = String::from_utf8(kv.1.to_vec()).unwrap();

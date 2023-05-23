@@ -32,7 +32,7 @@ mod tests {
         let res = planner.exec(format!("new({});",options.as_str()).as_str()).await;
         println!("new::collection::error {:?}",res.error);
 
-        let record_size = 10_000;
+        let record_size = 1000;//1_000_000;
         for i in 0..record_size {
             let v = serde_json::to_string(
                 &User {
@@ -46,19 +46,19 @@ mod tests {
         }
 
         let res = planner.exec(format!("get.when('.name == \"julfikar100\"').from('{}');",&COLLECTION).as_str()).await;
-        println!("when::map:: {:?}",res.time_taken);
+        println!("when::map:: {:?} {}",res.time_taken,res.data.len());
         assert_ne!(res.data.len(),0);
 
         let res = planner.exec(format!("get.index('julfikar1').from('{}');",&COLLECTION).as_str()).await;
-        println!("get::index::{:?}",res.time_taken);
+        println!("get::index::{:?} {}",res.time_taken,res.data.len());
         assert_eq!(res.data.len(),1);
 
-        let res = planner.exec(format!("get.when('.name CONTAINS \"julfikar\" && .name CONTAINS \"1\"').from('{}');",&COLLECTION).as_str()).await;
-        println!("search::query::{:?}",res.time_taken);
+        let res = planner.exec(format!("get.when('.name CONTAINS \"julfikar\" && .name CONTAINS \"1\"').from('{}').sort('name','ASC').page(0,10);",&COLLECTION).as_str()).await;
+        println!("get::when::{:?} {:?}",res.time_taken,res.data.len());
         assert_ne!(res.data.len(),0);
 
-        let res = planner.exec(format!("get.when('.age >= 1000 && COERCE .name _lowercase_ CONTAINS \"julfikar\"').from('{}');",&COLLECTION).as_str()).await;
-        println!("get::when::{:?}",res.time_taken);
+        let res = planner.exec(format!("get.when('.age == 100 && COERCE .name _lowercase_ CONTAINS \"julfikar\"').from('{}');",&COLLECTION).as_str()).await;
+        println!("get::when::{:?} {}",res.time_taken,res.data.len());
         assert_ne!(res.data.len(),0);
     }
 }

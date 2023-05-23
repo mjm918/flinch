@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::time::Instant;
 use crossbeam_queue::SegQueue;
 use rayon::prelude::*;
@@ -8,8 +9,8 @@ use crate::db::{CollectionOptions, Database};
 use crate::doc::Document;
 use crate::docv::QueryBased;
 use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
-use crate::hdrs::{ActionResult, FlinchError};
-use crate::utils::{trim_apos};
+use crate::hdrs::{ActionResult, FlinchError, SortDirection};
+use crate::utils::{parse_limit, parse_sort, trim_apos};
 
 pub struct Query {
     db: Database<QueryBased>
@@ -249,7 +250,7 @@ impl Query {
                     time_taken,
                 }
             }
-            Flql::Get(collection) => {
+            Flql::Get(collection,sort,limit) => {
                 let ttk = Instant::now();
                 let sg = SegQueue::new();
                 let col = self.db.using(trim_apos(&collection).as_str());
@@ -272,7 +273,7 @@ impl Query {
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }
             }
-            Flql::GetWhen(condition, collection) => {
+            Flql::GetWhen(condition, collection,sort,limit) => {
                 let ttk = Instant::now();
                 let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
@@ -291,22 +292,47 @@ impl Query {
                     };
                 }
                 let expression = expression.unwrap();
+                let sort = parse_sort(sort);
+                let limit = parse_limit(limit);
+
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let sg = SegQueue::new();
-                col.iter().for_each(|kv|{
+                let mut data = col.iter().filter(|kv|{
                     let pair = kv.pair();
                     let d = pair.1;
                     let x = expression.calculate(d.string().as_bytes());
                     if x.is_ok() {
                         let x = x.unwrap();
                         if x == flql::exp_parser::Value::Bool(true) {
-                            sg.push(d.document().clone());
+                            return true;
                         }
                     }
-                });
+                    false
+                })
+                    .map(|kv|kv.document().clone())
+                    .collect::<Vec<Value>>();
+
+                if let Some(option) = sort {
+                    data.par_sort_unstable_by(|kv1,kv2|{
+                        let k1 = kv1.get(option.field.as_str());
+                        if k1.is_some() {
+                            let k1 = k1.unwrap().clone();
+                            let k2 = kv2.get(option.field.as_str()).unwrap().clone();
+                            let k1 = k1.as_str().unwrap();
+                            let k2 = k2.as_str().unwrap();
+                            return match option.direction {
+                                SortDirection::Asc => k1.cmp(k2),
+                                SortDirection::Desc => k2.cmp(k1),
+                            };
+                        }
+                        Ordering::Equal
+                    });
+                }
+                if let Some((offset,limit)) = limit {
+                    data = data[offset..(offset + limit)].to_owned();
+                }
                 ActionResult{
-                    data: sg.into_iter().collect(),
+                    data,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }

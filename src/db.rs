@@ -18,7 +18,7 @@ pub struct CollectionOptions {
     pub clips_opts: Vec<String>,
 }
 
-pub struct Database<D> where D: Document {
+pub struct Database<D> where D: Document + 'static {
     storage: DashMap<String, Collection<D>>,
     persist: Db
 }
@@ -42,18 +42,8 @@ impl<D> Database<D>
         if let Err(err) = self.exi(name.as_str()) {
             return Err(err);
         }
-        self.storage.insert(name.clone(), Collection::<D>::new(&self.persist, opts));
-        Ok(())
-    }
-
-    pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
-        if let Err(err) = self.exi(name) {
-            return Err(err);
-        }
-        let col = self.using(name);
-        let col = col.unwrap();
-            col.value().empty().await;
-        self.storage.remove(name);
+        let name = name.clone();
+        self.storage.insert(name, Collection::<D>::new(&self.persist, opts));
 
         Ok(())
     }
@@ -63,6 +53,18 @@ impl<D> Database<D>
             return Ok(col);
         }
         Err(CollectionError::NoSuchCollection)
+    }
+
+    pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
+        if let Err(err) = self.exi(name) {
+            return Err(err);
+        }
+        let col = self.using(name);
+        let col = col.unwrap();
+        col.value().empty().await;
+        self.storage.remove(name);
+
+        Ok(())
     }
 
     fn exi(&self, name: &str) -> Result<(), CollectionError> {

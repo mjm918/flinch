@@ -14,6 +14,8 @@ Flinch is an in-memory, real-time document database designed for fast, efficient
 - Query: Document query faster than ⚡️
 - Open source: Flinch is an open-source project, allowing users to contribute to its development and customize it to suit their needs.
 
+> Insertion performance is slow. Indexing takes time and it's quite normal.
+
 # How to use
 
 **As library**

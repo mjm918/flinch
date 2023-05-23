@@ -34,6 +34,16 @@ pub enum PubSubRes {
     Err(String),
 }
 
+pub enum SortDirection {
+    Asc,
+    Desc
+}
+
+pub struct Sort {
+    pub field: String,
+    pub direction: SortDirection
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub enum FuncType {
     Lookup,
