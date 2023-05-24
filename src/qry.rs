@@ -1,15 +1,18 @@
 use std::cmp::Ordering;
+use std::sync::Arc;
 use std::time::Instant;
 use crossbeam_queue::SegQueue;
+use dashmap::mapref::one::Ref;
 use rayon::prelude::*;
 use flql::Flql;
 use futures::executor::{block_on};
 use serde_json::{Number, Value};
+use tokio::sync::mpsc::Sender;
 use crate::db::{CollectionOptions, Database};
 use crate::doc::Document;
 use crate::docv::QueryBased;
 use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
-use crate::hdrs::{ActionResult, FlinchError, SortDirection};
+use crate::hdrs::{ActionResult, FlinchError, PubSubEvent, Sort, SortDirection};
 use crate::utils::{parse_limit, parse_sort, trim_apos};
 
 pub struct Query {
@@ -19,6 +22,15 @@ pub struct Query {
 impl Query {
     pub fn new() -> Self {
         Self { db: Database::<QueryBased>::init() }
+    }
+
+    pub async fn subscribe(&self, name:&str, sx: Sender<PubSubEvent<String, QueryBased>>) -> Result<(), FlinchError> {
+        let col = self.db.using(name);
+        if col.is_err() {
+            return Err(FlinchError::CollectionError(CollectionError::NoSuchCollection));
+        }
+        let col = col.unwrap();
+        Ok(col.sub(sx).await.unwrap())
     }
 
     pub async fn exec(&self, stmt: &str) -> ActionResult {
@@ -252,7 +264,6 @@ impl Query {
             }
             Flql::Get(collection,sort,limit) => {
                 let ttk = Instant::now();
-                let sg = SegQueue::new();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
                     return ActionResult{
@@ -261,14 +272,22 @@ impl Query {
                         time_taken: format!("{:?}",ttk.elapsed()),
                     };
                 }
+                let sort = parse_sort(sort);
+                let limit = parse_limit(limit);
+
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                col.iter().for_each(|kv|{
-                    let pair = kv.pair();
-                    sg.push(pair.1.document().clone());
-                });
+                let data = self.proc(
+                    col.iter().map(|kv|{
+                        let k = kv.key();
+                        let v = kv.value();
+                        v.make(k.clone())
+                    }).collect::<Vec<Value>>(),
+                    sort,
+                    limit
+                );
                 ActionResult{
-                    data: sg.into_iter().collect(),
+                    data,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }
@@ -297,40 +316,28 @@ impl Query {
 
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let mut data = col.iter().filter(|kv|{
-                    let pair = kv.pair();
-                    let d = pair.1;
-                    let x = expression.calculate(d.string().as_bytes());
-                    if x.is_ok() {
-                        let x = x.unwrap();
-                        if x == flql::exp_parser::Value::Bool(true) {
-                            return true;
+                let mut data = self.proc(
+                    col.iter().filter(|kv|{
+                        let pair = kv.pair();
+                        let d = pair.1;
+                        let x = expression.calculate(d.string().as_bytes());
+                        if x.is_ok() {
+                            let x = x.unwrap();
+                            if x == flql::exp_parser::Value::Bool(true) {
+                                return true;
+                            }
                         }
-                    }
-                    false
-                })
-                    .map(|kv|kv.document().clone())
-                    .collect::<Vec<Value>>();
-
-                if let Some(option) = sort {
-                    data.par_sort_unstable_by(|kv1,kv2|{
-                        let k1 = kv1.get(option.field.as_str());
-                        if k1.is_some() {
-                            let k1 = k1.unwrap().clone();
-                            let k2 = kv2.get(option.field.as_str()).unwrap().clone();
-                            let k1 = k1.as_str().unwrap();
-                            let k2 = k2.as_str().unwrap();
-                            return match option.direction {
-                                SortDirection::Asc => k1.cmp(k2),
-                                SortDirection::Desc => k2.cmp(k1),
-                            };
-                        }
-                        Ordering::Equal
-                    });
-                }
-                if let Some((offset,limit)) = limit {
-                    data = data[offset..(offset + limit)].to_owned();
-                }
+                        false
+                    })
+                        .map(|kv|{
+                            let key = kv.key();
+                            let doc = kv.value();
+                            doc.make(key.to_owned())
+                        })
+                        .collect::<Vec<Value>>(),
+                    sort,
+                    limit
+                );
                 ActionResult{
                     data,
                     error: FlinchError::None,
@@ -356,7 +363,7 @@ impl Query {
                     time_taken = v.time_taken;
 
                     let d = v.data.unwrap();
-                    res = vec![d.1.data];
+                    res = vec![d.1.make(d.0)];
                 }
                 ActionResult{
                     data: res,
@@ -413,7 +420,7 @@ impl Query {
                 let data = c.data;
                 let sg = SegQueue::new();
                 data.par_iter().for_each(|kv|{
-                   sg.push(kv.1.data.clone());
+                   sg.push(kv.1.make(kv.0.to_owned()));
                 });
                 let res = sg.into_iter().collect();
                 ActionResult{
@@ -438,7 +445,7 @@ impl Query {
                 let mut data = vec![];
                 if x.data.is_some() {
                     let y = x.data.unwrap();
-                    data.push(y.1.document().clone());
+                    data.push(y.1.make(y.0));
                 }
                 ActionResult{
                     data,
@@ -459,7 +466,7 @@ impl Query {
                 let col = col.unwrap();
                 let ttk = Instant::now();
                 let res = col.fetch_range(trim_apos(&on).as_str(), trim_apos(&start), trim_apos(&end));
-                let data = res.data.iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
+                let data = res.data.iter().map(|kv|kv.1.make(kv.0.to_owned())).collect::<Vec<Value>>();
                 ActionResult{
                     data,
                     error: FlinchError::None,
@@ -587,6 +594,30 @@ impl Query {
             return Err(QueryError::ConfigureParseError(parsed.err().unwrap().to_string()));
         }
         Ok(())
+    }
+
+    fn proc(&self, opted: Vec<Value>, sort: Option<Sort>, limit: Option<(usize, usize)>) -> Vec<Value> {
+        let mut data = opted;
+        if let Some(option) = sort {
+            data.par_sort_unstable_by(|kv1,kv2|{
+                let k1 = kv1.get(option.field.as_str());
+                if k1.is_some() {
+                    let k1 = k1.unwrap().clone();
+                    let k2 = kv2.get(option.field.as_str()).unwrap().clone();
+                    let k1 = k1.as_str().unwrap();
+                    let k2 = k2.as_str().unwrap();
+                    return match option.direction {
+                        SortDirection::Asc => k1.cmp(k2),
+                        SortDirection::Desc => k2.cmp(k1),
+                    };
+                }
+                Ordering::Equal
+            });
+        }
+        if let Some((offset, limit)) = limit {
+            data = data[offset..(offset + limit)].to_owned();
+        }
+        data
     }
 
     fn err_c(&self, error: Option<CollectionError>) -> FlinchError {

@@ -192,6 +192,12 @@ impl Document for QueryBased {
         &self.data
     }
 
+    fn make(&self, key: String) -> Value {
+        let mut obj = self.object().to_owned();
+        obj.insert("_pointer".to_owned(), Value::String(key));
+        Value::Object(obj)
+    }
+
     fn string(&self) -> String {
         serde_json::to_string(self.document()).unwrap()
     }

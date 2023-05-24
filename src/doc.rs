@@ -44,6 +44,7 @@ pub trait Document: Index + Clips + Range + View + DocumentSearch {
     fn set_opts(&mut self, opts: &CollectionOptions);
     fn object(&self) -> &Map<String, Value>;
     fn document(&self) -> &Value;
+    fn make(&self, key: String) -> Value;
     fn string(&self) -> String;
 }
 
