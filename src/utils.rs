@@ -21,12 +21,15 @@ impl ExecTime {
         }
     }
 }
-
+pub static COL_PREFIX: &str = ":collection:";
 pub static TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn set_view_name(name: &str) -> String {
     format!(":view:{}",name)
 }
+
+pub fn prefix_col_name(name: &str) -> String { format!("{}{}", COL_PREFIX, name) }
+
 pub fn tokenize(query: &String) -> Vec<String> {
     query
         .trim()

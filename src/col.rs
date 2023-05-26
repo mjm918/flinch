@@ -2,6 +2,7 @@ use anyhow::Result;
 use crossbeam_queue::{ArrayQueue};
 use dashmap::{DashMap, DashSet};
 use dashmap::rayon::map::{Iter};
+use log::{debug, trace};
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -54,7 +55,8 @@ where
     }
 
     pub async fn load_bkp(&self) {
-        let res = self.bkp.fetch();
+        let res = self.bkp.fetch_doc();
+        debug!("loading {} records from local storage in collection {}",res.len(), &self.opts.name);
         for kv in res {
             let _ = self._put(kv.0, kv.1, false).await;
         }
@@ -65,10 +67,12 @@ where
         self.watchman.reg(sx).await
     }
 
+    #[inline]
     pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, IndexError> {
         self._put(k, d, true).await
     }
 
+    #[inline]
     async fn _put(&self, k: K, d: D, bkp: bool) -> Result<ExecutionTime, IndexError> {
         let exec = ExecTime::new();
         let mut v = d;
@@ -103,15 +107,16 @@ where
 
         self.kv.insert(k.to_string(), v.clone());
         if bkp {
-            let _ = self.bkp.put(k.to_string(),v.clone()).await;
+            self.bkp.put(k.to_string(),v.clone());
         }
 
         let query = ActionType::Insert(k.to_string(), v);
-        let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
+        let _ = self.watchman.notify(PubSubEvent::Data(query));
 
         Ok(exec.done())
     }
 
+    #[inline]
     pub async fn delete(&self, k: K) -> ExecutionTime {
         let exec = ExecTime::new();
         if self.kv.contains_key(&k) {
@@ -264,6 +269,7 @@ where
         }
     }
 
+    #[inline]
     pub fn search(&self, query: &str) -> FuncResult<Vec<(K, D)>> {
         let text = query.to_string();
         let exec = ExecTime::new();
@@ -283,6 +289,7 @@ where
         }
     }
 
+    #[inline]
     pub fn like_search(&self, query: &str) -> FuncResult<ArrayQueue<(K, D)>> {
         let text = query.to_string();
         let exec = ExecTime::new();
@@ -310,6 +317,7 @@ where
         }
     }
 
+    #[inline]
     pub fn iter(&self) -> Iter<'_, K, D> {
         self.kv.par_iter()
     }
@@ -322,10 +330,12 @@ where
         self.clips.iter()
     }
 
+    #[inline]
     pub fn len(&self) -> usize {
         self.kv.len()
     }
 
+    #[inline]
     pub fn id(&self) -> String {
         Uuid::new_v4().as_hyphenated().to_string()
     }
@@ -337,6 +347,7 @@ where
         }
     }
 
+    #[inline]
     pub async fn flush_bkp(&self) -> usize {
         self.bkp.flush().await
     }

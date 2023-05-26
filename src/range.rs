@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Bound;
 use dashmap::{DashMap, DashSet};
+use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -21,6 +23,8 @@ impl<K> Range<K>
     + Hash
     + Clone
     + Send
+    + Debug
+    + Display
     + 'static
 {
     pub fn new() -> Self {
@@ -55,6 +59,7 @@ impl<K> Range<K>
     }
 
     pub fn delete<D>(&self, k: &K, d: &D) where D: Document {
+        trace!("deleting range for key - {}",&k);
         d.fields().into_iter().for_each(|f|{
             if let Some(mut tree) = self.tree.get_mut(&f.key) {
                 if let Some(set) = tree.value_mut().get_mut(&f.value) {
@@ -65,6 +70,7 @@ impl<K> Range<K>
     }
 
     pub fn delete_tree(&self, f: &str) {
+        trace!("deleting range tree {}",&f);
         self.tree.remove(f);
     }
 
@@ -81,10 +87,5 @@ impl<K> Range<K>
                 res
             }
         }.into_iter().collect::<Vec<K>>()
-    }
-
-    pub fn clear(&self) {
-        self.tree.clear();
-        self.tree.shrink_to_fit();
     }
 }

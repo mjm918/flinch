@@ -1,3 +1,4 @@
+use log::trace;
 use tokio::sync::mpsc::error::SendTimeoutError;
 use tokio::sync::mpsc::Sender;
 use crate::hdrs::{Request, PubSubRes};
@@ -10,7 +11,7 @@ pub struct PubSub<M> {
 
 impl<M> PubSub<M> where M: Send + 'static
 {
-    pub(crate) fn new(sender: Sender<Request<M>>) -> Self {
+    pub fn new(sender: Sender<Request<M>>) -> Self {
         PubSub {
             sender
         }
@@ -18,6 +19,7 @@ impl<M> PubSub<M> where M: Send + 'static
 
     pub async fn reg(&self, sender: Sender<M>) -> Result<(), PubSubRes> {
         let res = self.sender.send_timeout(Request::Register(sender), TIMEOUT).await;
+        trace!("subscriber registered");
         match res {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -30,6 +32,7 @@ impl<M> PubSub<M> where M: Send + 'static
     }
 
     pub async fn notify(&self, msg: M) -> Result<(), PubSubRes> {
+        trace!("notifying message to subscriber");
         let res = self.sender.send_timeout(Request::Dispatch(msg), TIMEOUT).await;
         match res {
             Ok(_) => Ok(()),

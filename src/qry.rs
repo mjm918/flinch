@@ -1,11 +1,10 @@
 use std::cmp::Ordering;
-use std::sync::Arc;
 use std::time::Instant;
 use crossbeam_queue::SegQueue;
-use dashmap::mapref::one::Ref;
 use rayon::prelude::*;
 use flql::Flql;
 use futures::executor::{block_on};
+use log::debug;
 use serde_json::{Number, Value};
 use tokio::sync::mpsc::Sender;
 use crate::db::{CollectionOptions, Database};
@@ -16,12 +15,14 @@ use crate::hdrs::{ActionResult, FlinchError, PubSubEvent, Sort, SortDirection};
 use crate::utils::{parse_limit, parse_sort, trim_apos};
 
 pub struct Query {
-    db: Database<QueryBased>
+    db: Database<QueryBased>,
+    current: String
 }
 
 impl Query {
-    pub fn new() -> Self {
-        Self { db: Database::<QueryBased>::init() }
+    pub async fn new() -> Self {
+        let db = Database::<QueryBased>::init().await;
+        Self { db, current: "".to_string() }
     }
 
     pub async fn subscribe(&self, name:&str, sx: Sender<PubSubEvent<String, QueryBased>>) -> Result<(), FlinchError> {
@@ -33,7 +34,11 @@ impl Query {
         Ok(col.sub(sx).await.unwrap())
     }
 
-    pub async fn exec(&self, stmt: &str) -> ActionResult {
+    pub async fn exec(&mut self, stmt: &str) -> ActionResult {
+        debug!("flql executing {}", &stmt.chars().take(60).collect::<String>());
+
+        self.current = format!("{}",&stmt);
+
         let parsed = flql::parse(stmt);
         if parsed.is_err() {
             return ActionResult{
@@ -42,11 +47,12 @@ impl Query {
                 time_taken: "".to_string(),
             };
         }
+
         let parsed = parsed.unwrap();
         match parsed {
             Flql::New(options) => {
                 let ttk = Instant::now();
-                let x = self.new_c(options);
+                let x = self.new_c(options).await;
                 ActionResult {
                     data: vec![],
                     error: self.err_q(x.err()),
@@ -277,17 +283,23 @@ impl Query {
 
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let data = self.proc(
-                    col.iter().map(|kv|{
-                        let k = kv.key();
-                        let v = kv.value();
-                        v.make(k.clone())
-                    }).collect::<Vec<Value>>(),
-                    sort,
-                    limit
+                let mut data = col.iter().map(|kv|{
+                    let k = kv.key();
+                    let v = kv.value();
+                    v.make(k.clone())
+                }).collect::<Vec<Value>>();
+
+                self.proc(
+                    &mut data,
+                    sort
                 );
+
                 ActionResult{
-                    data,
+                    data: if let Some((offset, limit)) = limit {
+                        data[offset..(offset + limit)].to_owned()
+                    } else {
+                        data
+                    },
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }
@@ -316,30 +328,34 @@ impl Query {
 
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                let mut data = self.proc(
-                    col.iter().filter(|kv|{
-                        let pair = kv.pair();
-                        let d = pair.1;
-                        let x = expression.calculate(d.string().as_bytes());
-                        if x.is_ok() {
-                            let x = x.unwrap();
-                            if x == flql::exp_parser::Value::Bool(true) {
-                                return true;
-                            }
+                let mut data = col.iter().filter(|kv|{
+                    let pair = kv.pair();
+                    let d = pair.1;
+                    let x = expression.calculate(d.string().as_bytes());
+                    if x.is_ok() {
+                        let x = x.unwrap();
+                        if x == flql::exp_parser::Value::Bool(true) {
+                            return true;
                         }
-                        false
+                    }
+                    false
+                })
+                    .map(|kv|{
+                        let key = kv.key();
+                        let doc = kv.value();
+                        doc.make(key.to_owned())
                     })
-                        .map(|kv|{
-                            let key = kv.key();
-                            let doc = kv.value();
-                            doc.make(key.to_owned())
-                        })
-                        .collect::<Vec<Value>>(),
-                    sort,
-                    limit
+                    .collect::<Vec<Value>>();
+                self.proc(
+                    &mut data,
+                    sort
                 );
                 ActionResult{
-                    data,
+                    data: if let Some((offset, limit)) = limit {
+                        data[offset..(offset + limit)].to_owned()
+                    } else {
+                        data
+                    },
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }
@@ -582,11 +598,11 @@ impl Query {
         }
     }
 
-    fn new_c(&self, options: String) ->Result<(), QueryError> {
+    async fn new_c(&self, options: String) ->Result<(), QueryError> {
         let parsed:serde_json::Result<CollectionOptions> = serde_json::from_str(options.as_str());
         if parsed.is_ok() {
             let opts = parsed.unwrap();
-            let x = self.db.add(opts);
+            let x = self.db.add(opts).await;
             if x.is_err() {
                 return Err(QueryError::CollectionError(x.err().unwrap()));
             }
@@ -596,8 +612,7 @@ impl Query {
         Ok(())
     }
 
-    fn proc(&self, opted: Vec<Value>, sort: Option<Sort>, limit: Option<(usize, usize)>) -> Vec<Value> {
-        let mut data = opted;
+    fn proc(&self, data: &mut Vec<Value>, sort: Option<Sort>) {
         if let Some(option) = sort {
             data.par_sort_unstable_by(|kv1,kv2|{
                 let k1 = kv1.get(option.field.as_str());
@@ -614,15 +629,13 @@ impl Query {
                 Ordering::Equal
             });
         }
-        if let Some((offset, limit)) = limit {
-            data = data[offset..(offset + limit)].to_owned();
-        }
-        data
     }
 
     fn err_c(&self, error: Option<CollectionError>) -> FlinchError {
         if error.is_some() {
-            FlinchError::CollectionError(error.unwrap())
+            let err = error.unwrap();
+            debug!("collection error {} for query {}", &err, &self.current);
+            FlinchError::CollectionError(err)
         } else {
             FlinchError::None
         }
@@ -630,19 +643,24 @@ impl Query {
 
     fn err_q(&self, error: Option<QueryError>) -> FlinchError {
         if error.is_some() {
-            FlinchError::QueryError(error.unwrap())
+            let err = error.unwrap();
+            debug!("query error {} for query {}", &err, &self.current);
+            FlinchError::QueryError(err)
         } else {
             FlinchError::None
         }
     }
 
     fn err_s(&self, error: String) -> FlinchError {
+        debug!("expression error {} for query {}", &error, &self.current);
         FlinchError::ExpressionError(error)
     }
 
     fn err_d(&self, error: Option<DocumentError>) -> FlinchError {
         if error.is_some() {
-            FlinchError::DocumentError(error.unwrap())
+            let err = error.unwrap();
+            debug!("document error {} for query {}", &err, &self.current);
+            FlinchError::DocumentError(err)
         } else {
             FlinchError::None
         }
@@ -650,7 +668,9 @@ impl Query {
 
     fn err_i(&self, error: Option<IndexError>) -> FlinchError {
         if error.is_some() {
-            FlinchError::IndexError(error.unwrap())
+            let err = error.unwrap();
+            debug!("index error {} for query {}", &err, &self.current);
+            FlinchError::IndexError(err)
         } else {
             FlinchError::None
         }

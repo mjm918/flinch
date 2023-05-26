@@ -1,9 +1,11 @@
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 use anyhow::Result;
 use dashmap::{DashMap};
 use dashmap::mapref::one::Ref;
 use dashmap::rayon::map::Iter;
+use log::trace;
 use rayon::iter::IntoParallelRefIterator;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -26,6 +28,8 @@ impl<K> HashIndex<K>
     Clone +
     Send +
     Sync +
+    Debug +
+    Display +
     'static
 {
     pub fn new() -> Self {
@@ -47,6 +51,7 @@ impl<K> HashIndex<K>
     }
 
     pub fn delete<D>(&self, v: &D) where D: Document {
+        trace!("deleting hash index {:?}",&v.keys());
         v.keys().into_iter().for_each(|idx| {
             self.kv.remove(&idx);
         });
@@ -58,12 +63,5 @@ impl<K> HashIndex<K>
 
     pub fn iter(&self) -> Iter<'_, String, K> {
         self.kv.par_iter()
-    }
-
-    pub fn clear(&self) {
-        for kv in &self.kv {
-            self.kv.remove(kv.key());
-        }
-        self.kv.shrink_to_fit();
     }
 }

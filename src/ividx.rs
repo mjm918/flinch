@@ -1,7 +1,9 @@
 use std::collections::HashSet;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use dashmap::{DashMap, DashSet};
+use log::trace;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -23,6 +25,8 @@ impl<K> InvertedIndex<K>
     Clone +
     Send +
     Sync +
+    Debug +
+    Display +
     'static
 {
     pub fn new() -> Self {
@@ -55,6 +59,7 @@ impl<K> InvertedIndex<K>
     }
 
     pub fn delete(&self, k: K, v: String) -> JoinHandle<()> {
+        trace!("deleting inverted index for key - {}",&k);
         let rf = self.kv.clone();
         tokio::spawn(async move {
             for w in v.split_whitespace() {
@@ -110,12 +115,5 @@ impl<K> InvertedIndex<K>
             });
         });
         res.into_iter().collect()
-    }
-
-    pub fn clear(&self) {
-        self.kv.par_iter().for_each(|kv|{
-            self.kv.remove(kv.key());
-        });
-        self.kv.shrink_to_fit();
     }
 }

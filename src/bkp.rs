@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sled::{Tree, Iter, IVec, Db};
@@ -15,15 +16,22 @@ impl Bkp {
         Self { tree }
     }
 
-    pub async fn put<D>(&self, k: String, d: D) -> JoinHandle<sled::Result<Option<IVec>>> where
+    pub fn put<D>(&self, k: String, d: D) where
         D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document {
+        self.tree.insert(k.to_owned(),IVec::from(d.string().as_str())).expect(format!("inserting {} into local storage",&k).as_str());
+    }
+
+    pub async fn put_any<D>(&self, k: String, d: D) -> JoinHandle<sled::Result<Option<IVec>>>
+        where D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static {
         let rt = self.tree.clone();
         tokio::spawn(async move {
-            rt.insert(k,IVec::from(d.string().as_str()))
+            trace!("{} - key inserted into storage",&k);
+            rt.insert(k,IVec::from(serde_json::to_string(&d).unwrap().as_bytes()))
         })
     }
 
     pub fn remove(&self, k: String) -> sled::Result<Option<IVec>> {
+        trace!("{} - key removed from storage",&k);
         self.tree.remove(k)
     }
 
@@ -31,7 +39,7 @@ impl Bkp {
         self.tree.get(k)
     }
 
-    pub fn fetch<D>(&self) -> Vec<(String, D)> where
+    pub fn fetch_doc<D>(&self) -> Vec<(String, D)> where
         D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document {
         let mut res: Vec<(String, D)> = vec![];
         for item in self.tree.iter() {
@@ -41,7 +49,21 @@ impl Bkp {
             let v = D::from_str(s.as_str()).unwrap() as D;
             res.push((k,v));
         }
+        trace!("fetch from storage - record count - {}",res.len());
         res
+    }
+
+    pub fn prefix(&self, k: String) -> Vec<(String, String)> {
+        trace!("prefix scan for key {}",&k);
+        self.tree
+            .scan_prefix(k.as_bytes())
+            .map(|kv|{
+                let kv = kv.unwrap();
+                let key = String::from_utf8(kv.0.to_vec()).unwrap();
+                let value = String::from_utf8(kv.1.to_vec()).unwrap();
+                (key, value)
+            })
+            .collect::<Vec<(String, String)>>()
     }
 
     pub fn iter(&self) -> Iter {
@@ -50,6 +72,7 @@ impl Bkp {
 
     pub async fn flush(&self) -> usize {
         let size = self.tree.flush_async().await;
+        trace!("storage flushed");
         size.unwrap()
     }
 }

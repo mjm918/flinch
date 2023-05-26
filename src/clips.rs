@@ -1,7 +1,9 @@
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use dashmap::{DashMap, DashSet};
 use dashmap::rayon::map::Iter;
 use dashmap::mapref::one::{Ref};
+use log::trace;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -23,6 +25,8 @@ where K: Serialize +
         Clone +
         Send +
         Sync +
+        Debug +
+        Display +
         'static
 {
     pub fn new() -> Self {
@@ -61,6 +65,7 @@ where K: Serialize +
     }
 
     pub fn delete<D>(&self, k: &K, v: &D) where D: Document {
+        trace!("deleting clip key {}",&k);
         v.tokens().into_iter().for_each(|idx|{
             if let Some(set) = self.kv.get_mut(&idx) {
                 set.value().remove(&k);
@@ -70,17 +75,20 @@ where K: Serialize +
 
     pub fn delete_inner(&self, vw: &str, k: &K) {
         let view = &set_view_name(vw);
+        trace!("deleting view - inner {}",&view);
         if let Some(set) = self.kv.get_mut(view) {
             set.value().remove(&k);
         }
     }
 
     pub fn delete_clip(&self, clip: &str) {
+        trace!("deleting clip {}",&clip);
         self.kv.remove(clip);
     }
 
     pub fn delete_view(&self, vw: &str) {
         let view = set_view_name(vw);
+        trace!("deleting view {}",&view);
         self.kv.remove(&view);
     }
 
@@ -94,12 +102,5 @@ where K: Serialize +
 
     pub fn iter(&self) -> Iter<String, DashSet<K>> {
         self.kv.par_iter()
-    }
-
-    pub fn clear(&self) {
-        self.kv.par_iter().for_each(|kv|{
-            self.kv.remove(kv.key());
-        });
-        self.kv.shrink_to_fit();
     }
 }
