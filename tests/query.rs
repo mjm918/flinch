@@ -36,7 +36,7 @@ mod tests {
 
         // planner.subscribe(COLLECTION,sx).await.expect("subscribe channel");
 
-        /*let record_size = 70_402;
+        let record_size = 7402;
         for k in 0..record_size {
             let v = serde_json::to_string(
                 &User {
@@ -47,7 +47,7 @@ mod tests {
             let query = format!("put({}).into('{}');", v, &COLLECTION);
             let x = planner.exec(query.as_str()).await;
             assert_eq!(x.error, FlinchError::None);
-        }*/
+        }
 
         let x = planner.exec(format!("ttl(1).if('.age > 100 && .age < 110').into('{}');",&COLLECTION).as_str()).await;
         debug!("ttl::when:: {:?}",x.data);
