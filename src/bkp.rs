@@ -5,6 +5,7 @@ use serde::Serialize;
 use sled::{Tree, Iter, IVec, Db};
 use tokio::task::JoinHandle;
 use crate::doc::Document;
+use crate::utils::{DOC_PREFIX, get_doc_name};
 
 pub struct Bkp {
     tree: Arc<Tree>
@@ -41,13 +42,11 @@ impl Bkp {
 
     pub fn fetch_doc<D>(&self) -> Vec<(String, D)> where
         D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document {
+        let documents = self.prefix(format!("{}",DOC_PREFIX));
         let mut res: Vec<(String, D)> = vec![];
-        for item in self.tree.iter() {
-            let kv = item.unwrap();
-            let k = String::from_utf8(kv.0.to_vec()).unwrap();
-            let s = String::from_utf8(kv.1.to_vec()).unwrap();
+        for (k,s) in documents {
             let v = D::from_str(s.as_str()).unwrap() as D;
-            res.push((k,v));
+            res.push((get_doc_name(k.as_str()),v));
         }
         trace!("fetch from storage - record count - {}",res.len());
         res

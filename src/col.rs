@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use anyhow::Result;
 use crossbeam_queue::{ArrayQueue};
 use dashmap::{DashMap, DashSet};
@@ -14,18 +15,22 @@ use crate::clips::Clips;
 use crate::doc::Document;
 use crate::db::CollectionOptions;
 use crate::err::{IndexError};
+use crate::ge::EVENT_EMITTER;
 use crate::hdrs::{PubSubEvent, ActionType, PubSubRes, FuncResult, FuncType};
 use crate::hidx::HashIndex;
 use crate::ividx::InvertedIndex;
 use crate::range::Range;
 use crate::pbsb::PubSub;
-use crate::utils::ExecTime;
+use crate::ttl::{Entry, Ttl};
+use crate::utils::{ExecTime, get_ttl_name, prefix_doc, prefix_ttl, TTL_PREFIX};
 use crate::wtch::Watchman;
 
 pub type ExecutionTime = String;
 pub type K = String;
 
+/// Collection is a document storage
 pub struct Collection<D: Document> {
+    ttl: Arc<Ttl>,
     bkp: Bkp,
     kv: DashMap<K, D>,
     hash_idx: HashIndex<K>,
@@ -40,9 +45,15 @@ impl<D> Collection< D>
 where
     D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document
 {
-    pub fn new(db: &Db, opts: CollectionOptions) -> Self {
+    /// create a new collection based on `sled` instance and `CollectionOptions`.
+    /// boots previously inserted data
+    /// runs TTL engine
+    /// watch TTL events
+    pub async fn new(db: &Db, opts: CollectionOptions) -> Arc<Self> {
         let option = opts.clone();
-        Self {
+        let ttl = Arc::new(Ttl::new(option.name.as_str()));
+        let instance = Arc::new(Self {
+            ttl,
             bkp: Bkp::new(&db, option.name.as_str()),
             kv: DashMap::new(),
             hash_idx: HashIndex::new(),
@@ -51,29 +62,66 @@ where
             range: Range::new(),
             watchman: Watchman::<PubSubEvent<K, D>>::new(vec![]).unwrap().start(),
             opts
-        }
+        });
+        instance.boot().await;
+
+        let runtime = tokio::runtime::Handle::current();
+        let this = Arc::clone(&instance);
+        EVENT_EMITTER.lock().unwrap().on("expired",move|entry: Entry|{
+            runtime.block_on(async {
+                trace!("expired key - {:?}",&entry);
+                this._delete(entry.key, true).await;
+            });
+        });
+        instance
     }
 
-    pub async fn load_bkp(&self) {
+    async fn boot(&self) {
         let res = self.bkp.fetch_doc();
         debug!("loading {} records from local storage in collection {}",res.len(), &self.opts.name);
         for kv in res {
             let _ = self._put(kv.0, kv.1, false).await;
         }
+        let bkp_ttl = self.bkp.prefix(TTL_PREFIX.to_string());
+        debug!("{} items queued for expiry",bkp_ttl.len());
+        for kv in bkp_ttl {
+            let key = get_ttl_name(kv.0.as_str());
+            let value = kv.1.parse::<i64>();
+            if value.is_ok() {
+                let ttl = value.unwrap();
+                self.ttl.push(ttl, key);
+            } else {
+                debug!("error parsing timestamp {} {:?}",kv.1,value.err().unwrap());
+            }
+        }
+        debug!("booting TTL engine");
+        let ttl = Arc::clone(&self.ttl);
+        std::thread::spawn(move ||{
+            ttl.start();
+        });
     }
 
+    /// `pubsub` subscriber for Insert or Delete event
     pub async fn sub(&self, sx: tokio::sync::mpsc::Sender<PubSubEvent<K,D>>) -> Result<(), PubSubRes> {
+        debug!("subscriber added to watchman");
         let _ = self.watchman.notify(PubSubEvent::Subscribed(sx.clone())).await;
         self.watchman.reg(sx).await
     }
 
+    /// sets a TTL for a `Pointer`
+    pub async fn put_ttl(&self, k: K, timestamp: i64) {
+        self.bkp.put_any(prefix_ttl(k.as_str()), timestamp).await;
+        self.ttl.push(timestamp, k);
+    }
+
+    /// creates a document in the collection. `K` is type of `String` and represents a `Pointer`
     #[inline]
     pub async fn put(&self, k: K, d: D) -> Result<ExecutionTime, IndexError> {
         self._put(k, d, true).await
     }
 
     #[inline]
-    async fn _put(&self, k: K, d: D, bkp: bool) -> Result<ExecutionTime, IndexError> {
+    async fn _put(&self, k: K, d: D, new: bool) -> Result<ExecutionTime, IndexError> {
         let exec = ExecTime::new();
         let mut v = d;
         v.set_opts(&self.opts);
@@ -93,21 +141,24 @@ where
                 self.clips.put_view(&vw, &k);
             }
         }
+
         if !self.opts.search_opts.is_empty() {
             if let Some(val) = v.content() {
                 let _ = self.inverted_idx.put(k.clone(), val).await;
             }
         }
+
         if !self.opts.clips_opts.is_empty() {
             self.clips.put(&k, &v);
         }
+
         if !self.opts.range_opts.is_empty() {
             self.range.put(&k, &v);
         }
 
         self.kv.insert(k.to_string(), v.clone());
-        if bkp {
-            self.bkp.put(k.to_string(),v.clone());
+        if new {
+            self.bkp.put(prefix_doc(k.as_str()),v.clone());
         }
 
         let query = ActionType::Insert(k.to_string(), v);
@@ -116,8 +167,14 @@ where
         Ok(exec.done())
     }
 
+    /// deletes a document by a `Pointer`
     #[inline]
     pub async fn delete(&self, k: K) -> ExecutionTime {
+        self._delete(k, true).await
+    }
+
+    #[inline]
+    pub async fn _delete(&self, k: K, rm_ttl: bool) -> ExecutionTime {
         let exec = ExecTime::new();
         if self.kv.contains_key(&k) {
             let query = ActionType::<K,D>::Remove(k.clone());
@@ -129,15 +186,26 @@ where
             if let Some(view) = v.binding() {
                 self.clips.delete_inner(&view, &k)
             }
+
             if let Some(content) = v.content() {
                 let _ = self.inverted_idx.delete(k.to_string(), content).await;
             }
+
             self.clips.delete(&k, &v);
-            let _ = self.bkp.remove(k.to_string());
+            self.range.delete(&k, &v);
+
+            let _ = self.bkp.remove(prefix_doc(k.as_str()));
         }
+        if rm_ttl {
+            self.ttl.remove(k.to_string());
+            let _ = self.bkp.remove(prefix_ttl(k.as_str()));
+        }
+        trace!("deleted {}. remaining items left {}",k, self.len());
         exec.done()
     }
 
+    /// deletes document based on `Range`
+    #[inline]
     pub async fn delete_by_range(&self, field: &str, from: String, to: String) -> ExecutionTime {
         let exec = ExecTime::new();
         let res = self.fetch_range(field, from, to).data;
@@ -147,6 +215,8 @@ where
         exec.done()
     }
 
+    /// deletes clip
+    #[inline]
     pub async fn delete_by_clip(&self, clip: &str) -> ExecutionTime {
         let exec = ExecTime::new();
         let res = self.fetch_clip(clip).data;
@@ -156,6 +226,8 @@ where
         exec.done()
     }
 
+    /// gets documents based on array of `Pointers`
+    #[inline]
     pub fn multi_get(&self, keys: Vec<&K>) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::with_capacity(keys.len());
@@ -172,6 +244,8 @@ where
         }
     }
 
+    /// gets documents based on `Range` filter
+    #[inline]
     pub fn fetch_range(&self, field: &str, from: String, to: String) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::new();
@@ -188,6 +262,8 @@ where
         }
     }
 
+    /// gets a specific document by `Pointer`
+    #[inline]
     pub fn get(&self, k: &K) -> FuncResult<Option<(K, D)>> {
         let exec = ExecTime::new();
         let res = if let Some(res) = self.kv.get(k) {
@@ -203,6 +279,8 @@ where
         }
     }
 
+    /// gets a document by `index` value
+    #[inline]
     pub fn get_index(&self, index: &str) -> FuncResult<Option<(K, D)>> {
         let exec = ExecTime::new();
         let res = match self.hash_idx.get(index) {
@@ -225,6 +303,8 @@ where
         }
     }
 
+    /// gets a clip by `name`
+    #[inline]
     pub fn fetch_clip(&self, clip: &str) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let res = match self.clips.get(clip) {
@@ -247,6 +327,8 @@ where
         }
     }
 
+    /// fetch a view by `name`
+    #[inline]
     pub fn fetch_view(&self, view_name: &str) -> FuncResult<Vec<(K, Value)>> {
         let exec = ExecTime::new();
         let res = match self.clips.get_view(view_name) {
@@ -269,6 +351,7 @@ where
         }
     }
 
+    /// Search like type as you go
     #[inline]
     pub fn search(&self, query: &str) -> FuncResult<Vec<(K, D)>> {
         let text = query.to_string();
@@ -289,6 +372,7 @@ where
         }
     }
 
+    /// search in inverted index
     #[inline]
     pub fn like_search(&self, query: &str) -> FuncResult<ArrayQueue<(K, D)>> {
         let text = query.to_string();
@@ -317,36 +401,44 @@ where
         }
     }
 
+    /// returns an parallel iterator on `Flinch` storage
     #[inline]
     pub fn iter(&self) -> Iter<'_, K, D> {
         self.kv.par_iter()
     }
 
+    /// returns an parallel iterator on `Flinch` hash index
     pub fn iter_index(&self) -> Iter<'_, String, K> {
         self.hash_idx.iter()
     }
 
+    /// returns an parallel iterator on `Flinch` clip storage
     pub fn iter_clips(&self) -> Iter<String, DashSet<K>> {
         self.clips.iter()
     }
 
+    /// returns total number of documents available in the storage
     #[inline]
     pub fn len(&self) -> usize {
         self.kv.len()
     }
 
+    /// generates an UUID. can use it as a pointer
     #[inline]
     pub fn id(&self) -> String {
         Uuid::new_v4().as_hyphenated().to_string()
     }
 
+    /// truncate current collection
     pub async fn empty(&self) {
         let local = self.kv.clone();
         for kv in local {
             self.delete(kv.0).await;
         }
+        self.clips.clear_keys();
+        self.range.clear_trees();
     }
-
+    /// allows to save documents in `sled` storage on demand
     #[inline]
     pub async fn flush_bkp(&self) -> usize {
         self.bkp.flush().await

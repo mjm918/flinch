@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::{Duration, Instant};
 use crate::hdrs::{Sort, SortDirection};
 
@@ -21,14 +22,28 @@ impl ExecTime {
         }
     }
 }
+pub static TTL_PREFIX: &str = ":ttl:";
 pub static COL_PREFIX: &str = ":collection:";
+pub static DOC_PREFIX: &str = ":document:";
 pub static TIMEOUT: Duration = Duration::from_secs(5);
+
+pub fn database_path() -> String { Path::new(".").join("dbs").to_str().unwrap().to_string() }
 
 pub fn set_view_name(name: &str) -> String {
     format!(":view:{}",name)
 }
 
 pub fn prefix_col_name(name: &str) -> String { format!("{}{}", COL_PREFIX, name) }
+
+pub fn prefix_doc(k: &str) -> String { format!("{}{}",DOC_PREFIX, k) }
+
+pub fn prefix_ttl(key: &str) -> String { format!("{}{}", TTL_PREFIX, key) }
+
+pub fn get_col_name(name: &str) -> String { name.replace(COL_PREFIX,"") }
+
+pub fn get_doc_name(name: &str) -> String { name.replace(DOC_PREFIX,"") }
+
+pub fn get_ttl_name(name: &str) -> String { name.replace(TTL_PREFIX, "") }
 
 pub fn tokenize(query: &String) -> Vec<String> {
     query

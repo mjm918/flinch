@@ -4,7 +4,7 @@ use crossbeam_queue::SegQueue;
 use rayon::prelude::*;
 use flql::Flql;
 use futures::executor::{block_on};
-use log::debug;
+use log::{debug, trace};
 use serde_json::{Number, Value};
 use tokio::sync::mpsc::Sender;
 use crate::db::{CollectionOptions, Database};
@@ -14,17 +14,21 @@ use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
 use crate::hdrs::{ActionResult, FlinchError, PubSubEvent, Sort, SortDirection};
 use crate::utils::{parse_limit, parse_sort, trim_apos};
 
+/// creates a `Query` session for
+/// executing `flql`
 pub struct Query {
     db: Database<QueryBased>,
     current: String
 }
 
 impl Query {
+    /// creates an instance of `Flinch` database
     pub async fn new() -> Self {
         let db = Database::<QueryBased>::init().await;
         Self { db, current: "".to_string() }
     }
 
+    /// `pubsub` for new documents or remove document event
     pub async fn subscribe(&self, name:&str, sx: Sender<PubSubEvent<String, QueryBased>>) -> Result<(), FlinchError> {
         let col = self.db.using(name);
         if col.is_err() {
@@ -34,8 +38,9 @@ impl Query {
         Ok(col.sub(sx).await.unwrap())
     }
 
+    /// expect an argument `flql` statement
     pub async fn exec(&mut self, stmt: &str) -> ActionResult {
-        debug!("flql executing {}", &stmt.chars().take(60).collect::<String>());
+        trace!("flql executing {}", &stmt.chars().take(60).collect::<String>());
 
         self.current = format!("{}",&stmt);
 
@@ -129,8 +134,65 @@ impl Query {
                     time_taken: format!("{:?}",ttk.elapsed()),
                 }
             }
-            Flql::Ttl(_duration,_condition,_collection) => {
-                unimplemented!()
+            Flql::Ttl(duration,condition,collection) => {
+                let ttk = Instant::now();
+                let timestamp = duration.parse::<i64>();
+                if timestamp.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_s(format!("{} is malformed as a TTL value",duration)),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let expression = flql::expr_parse(trim_apos(&condition).as_str());
+                if expression.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_s(expression.err().unwrap().to_string()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = self.db.using(trim_apos(&collection).as_str());
+                if col.is_err() {
+                    return ActionResult{
+                        data: vec![],
+                        error: self.err_c(col.err()),
+                        time_taken: format!("{:?}",ttk.elapsed()),
+                    };
+                }
+                let col = col.unwrap();
+                let expression = expression.unwrap();
+                let timestamp = chrono::Local::now() + chrono::Duration::seconds(timestamp.unwrap());
+                let timestamp = timestamp.timestamp();
+                let ttk = Instant::now();
+                let data = col.iter().filter(|kv|{
+                    let pair = kv.pair();
+                    let d = pair.1;
+                    let x = expression.calculate(d.string().as_bytes());
+                    if x.is_ok() {
+                        let x = x.unwrap();
+                        if x == flql::exp_parser::Value::Bool(true) {
+                            return true;
+                        }
+                    }
+                    false
+                })
+                    .map(|kv|{
+                        let key = kv.key();
+                        key.to_string()
+                    })
+                    .collect::<Vec<String>>();
+                // FIXME: do in par_iter
+                for key in &data {
+                    col.put_ttl(key.to_string(), timestamp).await;
+                }
+                let message = format!("TTL was set for {} keys", data.len());
+                let data = vec![Value::String(message)];
+                ActionResult{
+                    data,
+                    error: FlinchError::None,
+                    time_taken: format!("{:?}",ttk.elapsed()),
+                }
             }
             Flql::Put(data, collection) => {
                 let ttk = Instant::now();

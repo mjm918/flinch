@@ -16,11 +16,14 @@ pub enum Request<M> {
     Dispatch(M)
 }
 
+/// `ActionType` is used for pubsub
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ActionType<K, D> {
     Insert(K, D),
     Remove(K),
 }
+
+/// `PubSubEvent` is used for pubsub
 #[derive(Clone)]
 pub enum PubSubEvent<K, D> {
     Data(ActionType<K, D>),

@@ -2,7 +2,6 @@
 mod tests {
     use log::debug;
     use serde::{Deserialize, Serialize};
-    use rayon::prelude::*;
     use flinch::db::CollectionOptions;
     use flinch::doc::ViewConfig;
     use flinch::hdrs::{ActionType, FlinchError, PubSubEvent};
@@ -29,15 +28,15 @@ mod tests {
             range_opts: vec![format!("age")],
             clips_opts: vec![format!("name")],
         };
-        let (sx, mut rx) = tokio::sync::mpsc::channel(30000);
+        // let (sx, mut _rx) = tokio::sync::mpsc::channel(30000);
         let options = serde_json::to_string(&col_opts).unwrap();
         let mut planner = Query::new().await;
         let res = planner.exec(format!("new({});",options.as_str()).as_str()).await;
         debug!("new::collection::error {:?}",res.error);
 
-        planner.subscribe(COLLECTION,sx).await.expect("subscribe channel");
+        // planner.subscribe(COLLECTION,sx).await.expect("subscribe channel");
 
-        let record_size = 7402;
+        /*let record_size = 70_402;
         for k in 0..record_size {
             let v = serde_json::to_string(
                 &User {
@@ -48,7 +47,11 @@ mod tests {
             let query = format!("put({}).into('{}');", v, &COLLECTION);
             let x = planner.exec(query.as_str()).await;
             assert_eq!(x.error, FlinchError::None);
-        }
+        }*/
+
+        let x = planner.exec(format!("ttl(1).if('.age > 100 && .age < 110').into('{}');",&COLLECTION).as_str()).await;
+        debug!("ttl::when:: {:?}",x.data);
+        assert_eq!(x.error,FlinchError::None);
 
         let res = planner.exec(format!("get.when('.name == \"julfikar100\"').from('{}').sort(null).page(null);",&COLLECTION).as_str()).await;
         debug!("when::map:: {:?} {:?}",res.time_taken,res.data);

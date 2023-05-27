@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod hidx;
 mod ividx;
 mod range;
@@ -8,6 +11,8 @@ mod pbsb;
 mod act;
 mod utils;
 mod bkp;
+mod ttl;
+mod ge;
 
 pub mod doc;
 pub mod col;
@@ -15,4 +20,3 @@ pub mod db;
 pub mod hdrs;
 pub mod docv;
 pub mod qry;
-mod ttl;

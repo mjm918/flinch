@@ -86,10 +86,12 @@ where K: Serialize +
         self.kv.remove(clip);
     }
 
-    pub fn delete_view(&self, vw: &str) {
-        let view = set_view_name(vw);
-        trace!("deleting view {}",&view);
-        self.kv.remove(&view);
+    pub fn clear_keys(&self) {
+        trace!("clearing keys for clips");
+        let non_ref = self.kv.clone();
+        for kv in non_ref {
+            self.delete_clip(kv.0.as_str());
+        }
     }
 
     pub fn get(&self, clip: &str) -> Option<Ref<String, DashSet<K>>> {

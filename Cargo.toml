@@ -1,6 +1,6 @@
 [package]
 name = "flinch"
-version = "0.1.61"
+version = "0.1.62"
 edition = "2021"
 authors = ["Mohammad Julfikar <julfikar@eztech.com.my>", "Mohammad Julfikar <md.julfikar.mahmud@gmail.com>"]
 categories = ["parser-implementations","caching","database-implementations"]
@@ -20,9 +20,11 @@ anyhow = "1.0.70"
 chrono = "0.4.24"
 crossbeam-queue = "0.3.8"
 dashmap = { version="5.4.0", features=["rayon", "serde"] }
+bincode = "2.0.0-rc.3"
 flql = "0.2.3"
 futures = "0.3.28"
 log = "0.4.17"
+lazy_static = "1.4.0"
 rayon = "1.7.0"
 serde = { version="1.0.160", features=["derive"] }
 serde_json = "1.0.95"

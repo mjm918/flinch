@@ -74,6 +74,13 @@ impl<K> Range<K>
         self.tree.remove(f);
     }
 
+    pub fn clear_trees(&self) {
+        let non_ref = self.tree.clone();
+        for kv in non_ref {
+            self.delete_tree(kv.0.as_str());
+        }
+    }
+
     pub fn range(&self, f: &str, from: String, to: String) -> Vec<K> {
         match self.tree.get(f) {
             None => BTreeSet::new(),

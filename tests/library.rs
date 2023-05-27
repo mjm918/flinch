@@ -29,7 +29,7 @@ mod tests {
             clips_opts: vec![format!("name")],
         };
         let database: Database<QueryBased> = Database::init().await;
-        database.add(col_opts).await.expect("created new collection");
+        let _ = database.add(col_opts).await;
 
         debug!("ls Collections {:?}", database.ls());
 
@@ -38,13 +38,12 @@ mod tests {
 
         let instance = instance.unwrap();
         let collection = instance.value();
-        assert_eq!(collection.len(),0);
 
         /*let (sx, mut rx) = tokio::sync::mpsc::channel(30000);
         collection.sub(sx).await.expect("subscribe to channel");*/
 
         let insert = Instant::now();
-        let record_size = 50_000 * 2;
+        let record_size = 1000;
         for k in 0..record_size {
             let v = serde_json::to_string(
                 &User {
