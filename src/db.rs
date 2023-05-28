@@ -2,7 +2,7 @@ use std::sync::Arc;
 use anyhow::{Result};
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
-use log::{info, warn};
+use log::{error, info, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
@@ -40,13 +40,16 @@ impl<D> Database<D>
     /// 2. creates persistent storage
     /// 3. boots previously created collections
     pub async fn init() -> Self {
-        SimpleLogger::new()
+        let logger = SimpleLogger::new()
             .with_module_level("sled", log::LevelFilter::Info)
             .with_colors(true)
             .with_level(log::LevelFilter::Trace)
-            .init()
-            .unwrap();
-
+            .init();
+        if logger.is_ok() {
+            logger.unwrap();
+        } else {
+            error!("{:?}",logger.err().unwrap());
+        }
         let storage = DashMap::new();
         let persist = sled::open(database_path()).unwrap();
         let internal_tree = Bkp::new(&persist,"__flinch_internal");
