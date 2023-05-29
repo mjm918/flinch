@@ -41,7 +41,7 @@ impl Ttl {
     pub fn start(&self) {
         loop {
             self.purge();
-            sleep(std::time::Duration::from_millis(1));
+            sleep(std::time::Duration::from_millis(500));
         }
     }
 
