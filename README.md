@@ -273,4 +273,25 @@ async fn query_example() {
 }
 ```
 
+More Query examples can be found in other repository https://github.com/mjm918/flinch-flql
+
+```javascript
+new({});
+drop('');
+exists('').into('');
+length('');
+put({}).into('');
+put({}).when('prop.name == \"acv\" OR prop.name STARTS_WITH \"ac\"').into('');
+put({}).pointer('').into('');
+get.from('');
+get.when('prop.name == \"acv\" OR prop.name STARTS_WITH \"ac\"').from('');
+get.pointer('').from('');
+get.view('').from('');
+get.clip('').from('');
+delete.from('');
+delete.when('prop.name == \"acv\" OR prop.name STARTS_WITH \"ac\"').from('');
+delete.pointer('').from('');
+delete.clip('').from('');
+```
+
 These FLQL queries can be executed using the Flinch Query Planner and provide a flexible and efficient way to interact with Flinch collections.
