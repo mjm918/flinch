@@ -1,17 +1,24 @@
+#![feature(integer_atomics, const_fn_trait_bound)]
+use std::alloc::System;
 use std::sync::Arc;
 use anyhow::{Result};
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
-use log::{error, info, warn};
+use log::{error, info, trace, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
+use size::{Base, Size};
 use sled::Db;
 use crate::bkp::Bkp;
 use crate::doc::{Document, ViewConfig};
 use crate::err::{CollectionError};
 use crate::col::{Collection};
 use crate::utils::{COL_PREFIX, database_path, get_col_name, prefix_col_name};
+use crate::zalloc::Zalloc;
+
+#[global_allocator]
+static ZALLOC_MESSURE: Zalloc<System> = Zalloc::new(System);
 
 /// `CollectionOptions` is used while creating a collection
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -40,6 +47,9 @@ impl<D> Database<D>
     /// 2. creates persistent storage
     /// 3. boots previously created collections
     pub async fn init() -> Self {
+        /// Reset allocation count
+        ZALLOC_MESSURE.reset();
+        /// Set database logger
         let logger = SimpleLogger::new()
             .with_module_level("sled", log::LevelFilter::Info)
             .with_colors(true)
@@ -68,16 +78,30 @@ impl<D> Database<D>
                 warn!("{} failed to load from local storage",exi.0);
             }
         }
-        Self {
+        let instance = Self {
             storage: Arc::new(storage),
             persist,
             internal_tree
-        }
+        };
+        instance.watch_memory();
+        instance
     }
+
+    /// watch current memory usage
+    fn watch_memory(&self) {
+        std::thread::spawn(move ||{
+            loop {
+                trace!("memory used: {}", Size::from_bytes(ZALLOC_MESSURE.get()).format().with_base(Base::Base10));
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        });
+    }
+
     /// `ls` list out all the collections in the database
     pub fn ls(&self) -> Vec<String> {
         self.storage.iter().map(|kv|kv.key().to_string()).collect::<Vec<String>>()
     }
+
     /// `add` allows you to create collection. Required argument `CollectionOptions`
     pub async fn add(&self, opts: CollectionOptions) -> Result<(), CollectionError> {
         let name = &opts.name.to_owned();
@@ -92,6 +116,7 @@ impl<D> Database<D>
 
         Ok(())
     }
+
     /// `using` returns a session of a collection by `name`
     pub fn using(&self, name: &str) -> Result<Ref<String,Arc<Collection<D>>>, CollectionError> {
         if let Some(col) = self.storage.get(name) {
@@ -99,6 +124,7 @@ impl<D> Database<D>
         }
         Err(CollectionError::NoSuchCollection)
     }
+
     /// `drop` drops a collection by `name`
     pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
         if let Err(err) = self.exi(name) {

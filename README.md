@@ -246,15 +246,13 @@ async fn query_example() {
                 age: i,
             }
         ).unwrap();
-        let query = format!("put({
-
-}).into('{}');", v, &COLLECTION);
+        let query = format!("put({}).into('{}');", v, &COLLECTION);
         let x = planner.exec(query.as_str()).await;
         assert_eq!(x.error, FlinchError::None);
     }
 
     // Get documents from the collection
-    let res = planner.exec(format!("get.when(:map(\"name\") == \"julfikar1\":).from('{}');",&COLLECTION).as_str()).await;
+    let res = planner.exec(format!("get.when('map(\"name\") == \"julfikar1\"').from('{}');",&COLLECTION).as_str()).await;
     println!("{:?}",res);
 
     // Get an index from the collection
@@ -263,10 +261,6 @@ async fn query_example() {
 
     // Perform a search query in the collection
     let res = planner.exec(format!("search.query('julfikar 1').from('{}');",&COLLECTION).as_str()).await;
-    println!("{:?}",res);
-
-    // Perform a conditional search query in the collection
-    let res = planner.exec(format!("search.when(:map(\"age\") == 0:).query('julfikar').from('{}');",&COLLECTION).as_str()).await;
     println!("{:?}",res);
 }
 ```
