@@ -105,10 +105,9 @@ impl Query {
                 let ttk = Instant::now();
                 let exi = col.get(&pointer);
                 let res = if exi.data.is_some() {
-                    let data = exi.data.unwrap();
-                    vec![data.1.data]
+                    vec![Value::Bool(true)]
                 } else {
-                    vec![]
+                    vec![Value::Bool(false)]
                 };
                 ActionResult{
                     data: res,
@@ -650,7 +649,7 @@ impl Query {
                     time_taken: x,
                 }
             }
-            Flql::None => {
+            _ => {
                 ActionResult{
                     data: vec![],
                     error: FlinchError::None,

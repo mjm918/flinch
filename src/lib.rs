@@ -13,6 +13,7 @@ mod utils;
 mod bkp;
 mod ttl;
 mod ge;
+mod zalloc;
 
 pub mod doc;
 pub mod col;
