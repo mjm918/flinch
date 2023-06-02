@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
-use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
+
+use crate::errors::{CollectionError, DocumentError, IndexError, QueryError};
 
 #[allow(dead_code)]
 pub enum WatcherState {

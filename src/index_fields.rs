@@ -2,12 +2,14 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
+
 use dashmap::{DashMap, DashSet};
 use log::trace;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::task::JoinHandle;
+
 use crate::utils::tokenize;
 
 pub struct InvertedIndex<K> {

@@ -78,3 +78,11 @@ pub enum DbError {
     #[error("error parsing config file")]
     ErrorParsingConfig
 }
+
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
+pub enum SchemaError {
+    #[error("no such user `{0}`")]
+    NoSuchUser(String),
+    #[error("auth failed. no session found")]
+    NoSession
+}

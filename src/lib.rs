@@ -1,21 +1,21 @@
 mod index_hash;
-mod index_inverted;
-mod range_filter;
+mod index_fields;
+mod range;
 mod clips;
-mod err;
+mod errors;
 mod watchman;
 mod pub_sub;
-mod notification_type;
+mod notif_type;
 mod utils;
 mod persistent;
 mod ttl;
-mod global_events;
+mod events;
 mod zalloc;
 
-pub mod document_trait;
+pub mod doc_trait;
 pub mod collection;
 pub mod database;
 pub mod headers;
-pub mod document;
+pub mod doc;
 pub mod query;
 pub mod schemas;

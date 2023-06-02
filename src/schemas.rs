@@ -3,14 +3,17 @@ use dashmap::DashMap;
 use dashmap::mapref::one::RefMut;
 use log::warn;
 use serde::{Deserialize, Serialize};
+
+use crate::errors::DbError;
+use crate::headers::{FlinchCnf, QueryResult};
 use crate::persistent::Persistent;
-use crate::err::DbError;
 use crate::query::Query;
-use crate::utils::{database_path, DBLIST_PREFIX, DBUSER_PREFIX, uuid};
+use crate::utils::{cnf_content, database_path, DBLIST_PREFIX, DBUSER_PREFIX, uuid};
 
 pub type DbName = String;
 pub type SessionId = String;
 pub type UserName = String;
+pub type Password = String;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DbUser {
@@ -30,25 +33,37 @@ pub struct Schemas {
     pub creds: DashMap<DbName, DashMap<UserName, DbUser>>,
     pub sess: DashMap<SessionId, DbUser>,
     internal: Persistent,
+    config: FlinchCnf
 }
 
 impl Schemas {
-    pub async fn init() -> Self {
-        let db = sled::open(database_path(Some(format!("flinch-internal"))));
+    pub async fn init() -> anyhow::Result<Self> {
+        let cnf = cnf_content();
+        if cnf.is_err() {
+            return Err(anyhow!(cnf.err().unwrap()));
+        }
+        let cnf = cnf.unwrap();
+
+        let db_dir = &cnf.data_dir;
+        let db = sled::open(database_path(Some(db_dir.to_lowercase())));
         if db.is_err() {
             panic!("error opening flinch-internal storage {}", db.err().unwrap());
         }
         let db = db.unwrap();
+
         let slf = Self {
             dbs: DashMap::new(),
             creds: DashMap::new(),
             sess: DashMap::new(),
-            internal: Persistent::open(&db, "store")
+            internal: Persistent::open(&db, "store"),
+            config: cnf
         };
+
         let docs = slf.internal.prefix(format!("{}",&DBLIST_PREFIX));
         for (_, db_name) in docs {
             slf.dbs.insert(db_name.to_owned(), Query::new_with_name(db_name.as_str()).await);
         }
+
         let users = slf.internal.prefix(format!("{}",&DBUSER_PREFIX));
         for (_, user) in users {
             let json = serde_json::from_str::<DbUser>(user.as_str());
@@ -64,8 +79,12 @@ impl Schemas {
             }
         }
 
-        slf
+        Ok(slf)
     }
+
+    /*pub async fn query(&self, stmt: &str) -> QueryResult {
+
+    }*/
 
     async fn new(&self, name: &str, permit: &str) -> anyhow::Result<()> {
         if self.dbs.contains_key(&name.to_string()) {
@@ -104,6 +123,14 @@ impl Schemas {
             db.drop(col.as_str()).await.expect("collection to drop");
         }
         self.dbs.remove(name);
+        Ok(())
+    }
+
+    async fn permit(&self, name: &str, permit: &str) -> anyhow::Result<()> {
+        if !self.dbs.contains_key(&name.to_string()) {
+            return Err(anyhow!(DbError::DbNotExists(name.to_string())));
+        }
+
         Ok(())
     }
 }

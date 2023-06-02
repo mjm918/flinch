@@ -1,19 +1,22 @@
 #![feature(integer_atomics, const_fn_trait_bound)]
+
 use std::alloc::System;
 use std::sync::Arc;
-use anyhow::{Result};
+
+use anyhow::Result;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use log::{error, info, trace, warn};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use simple_logger::SimpleLogger;
 use size::{Base, Size};
 use sled::Db;
+
+use crate::collection::Collection;
+use crate::doc_trait::{Document, ViewConfig};
+use crate::errors::CollectionError;
 use crate::persistent::Persistent;
-use crate::document_trait::{Document, ViewConfig};
-use crate::err::{CollectionError};
-use crate::collection::{Collection};
 use crate::utils::{COL_PREFIX, database_path, get_col_name, prefix_col_name};
 use crate::zalloc::Zalloc;
 

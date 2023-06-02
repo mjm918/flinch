@@ -1,25 +1,27 @@
 use std::sync::Arc;
+
 use anyhow::Result;
-use crossbeam_queue::{ArrayQueue};
+use crossbeam_queue::ArrayQueue;
 use dashmap::{DashMap, DashSet};
-use dashmap::rayon::map::{Iter};
+use dashmap::rayon::map::Iter;
 use log::{debug, trace};
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 use sled::Db;
-use crate::persistent::Persistent;
+
 use crate::clips::Clips;
-use crate::document_trait::Document;
 use crate::database::CollectionOptions;
-use crate::err::{IndexError};
-use crate::global_events::EVENT_EMITTER;
-use crate::headers::{PubSubEvent, NotificationType, PubSubRes, FuncResult, FuncType};
+use crate::doc_trait::Document;
+use crate::errors::IndexError;
+use crate::events::EVENT_EMITTER;
+use crate::headers::{FuncResult, FuncType, NotificationType, PubSubEvent, PubSubRes};
+use crate::index_fields::InvertedIndex;
 use crate::index_hash::HashIndex;
-use crate::index_inverted::InvertedIndex;
-use crate::range_filter::Range;
+use crate::persistent::Persistent;
 use crate::pub_sub::PubSub;
+use crate::range::Range;
 use crate::ttl::{Entry, Ttl};
 use crate::utils::{ExecTime, get_ttl_name, prefix_doc, prefix_ttl, TTL_PREFIX, uuid};
 use crate::watchman::Watchman;

@@ -2,8 +2,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::err::{DocumentError};
 use crate::database::CollectionOptions;
+use crate::errors::DocumentError;
 
 /// `Field` is used in `CollectionOptions`
 /// for range configuration

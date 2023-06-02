@@ -1,9 +1,11 @@
 use std::sync::Arc;
+
 use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sled::{Tree, Iter, IVec, Db};
-use crate::document_trait::Document;
+use sled::{Db, Iter, IVec, Tree};
+
+use crate::doc_trait::Document;
 use crate::utils::{DOC_PREFIX, get_doc_name};
 
 pub struct Persistent {

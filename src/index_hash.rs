@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 use anyhow::Result;
-use dashmap::{DashMap};
+use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
 use dashmap::rayon::map::Iter;
 use log::trace;
@@ -10,8 +10,8 @@ use rayon::iter::IntoParallelRefIterator;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::document_trait::Document;
-use crate::err::IndexError;
+use crate::doc_trait::Document;
+use crate::errors::IndexError;
 
 pub struct HashIndex<K> {
     pub kv: DashMap<String, K>,

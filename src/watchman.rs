@@ -1,6 +1,7 @@
-use anyhow::{Result};
+use anyhow::Result;
 use tokio::sync::mpsc::{channel, Sender};
-use crate::err::WatcherError;
+
+use crate::errors::WatcherError;
 use crate::headers::{DestinationDown, Request, WatcherState};
 use crate::pub_sub::PubSub;
 

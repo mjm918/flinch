@@ -1,7 +1,8 @@
 use log::trace;
 use tokio::sync::mpsc::error::SendTimeoutError;
 use tokio::sync::mpsc::Sender;
-use crate::headers::{Request, PubSubRes};
+
+use crate::headers::{PubSubRes, Request};
 use crate::utils::TIMEOUT;
 
 #[derive(Clone, Debug)]

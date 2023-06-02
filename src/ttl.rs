@@ -1,10 +1,12 @@
 use std::thread::sleep;
+
 use bincode::{Decode, Encode};
 use dashmap::DashMap;
-use log::{trace};
+use log::trace;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::global_events::EVENT_EMITTER;
+
+use crate::events::EVENT_EMITTER;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
 pub struct Entry {

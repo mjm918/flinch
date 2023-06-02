@@ -1,13 +1,15 @@
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+
 use dashmap::{DashMap, DashSet};
+use dashmap::mapref::one::Ref;
 use dashmap::rayon::map::Iter;
-use dashmap::mapref::one::{Ref};
 use log::trace;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use crate::document_trait::Document;
+
+use crate::doc_trait::Document;
 use crate::utils::set_view_name;
 
 pub struct Clips<K> {

@@ -3,7 +3,7 @@ mod tests {
     use log::debug;
     use serde::{Deserialize, Serialize};
     use flinch::database::CollectionOptions;
-    use flinch::document_trait::ViewConfig;
+    use flinch::doc_trait::ViewConfig;
     use flinch::headers::{NotificationType, FlinchError, PubSubEvent};
     use flinch::query::Query;
 

@@ -2,9 +2,11 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
+
 use anyhow::anyhow;
-use log::{error};
+use log::error;
 use uuid::Uuid;
+
 use crate::headers::{FlinchCnf, Sort, SortDirection};
 
 pub struct ExecTime {

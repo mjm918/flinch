@@ -2,12 +2,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Bound;
+
 use dashmap::{DashMap, DashSet};
 use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::document_trait::Document;
+use crate::doc_trait::Document;
 
 pub struct Range<K> {
     pub tree: DashMap<String, BTreeMap<String, DashSet<K>>>,

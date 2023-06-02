@@ -1,8 +1,9 @@
-use serde_json::{Map, Value};
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
 use crate::database::CollectionOptions;
-use crate::document_trait::{Clips, Document, DocumentSearch, Field, Index, Range, View, ViewConfig};
-use crate::err::DocumentError;
+use crate::doc_trait::{Clips, Document, DocumentSearch, Field, Index, Range, View, ViewConfig};
+use crate::errors::DocumentError;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct QueryBased {

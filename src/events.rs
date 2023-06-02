@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
 use bincode::config;
-use serde::{Deserialize,Serialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub struct Listener {

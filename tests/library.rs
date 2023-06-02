@@ -4,8 +4,8 @@ mod tests {
     use log::debug;
     use serde::{Deserialize, Serialize};
     use flinch::database::{CollectionOptions, Database};
-    use flinch::document_trait::{Document, ViewConfig};
-    use flinch::document::QueryBased;
+    use flinch::doc_trait::{Document, ViewConfig};
+    use flinch::doc::QueryBased;
     use flinch::headers::{NotificationType, PubSubEvent};
 
     const COLLECTION: &str = "demo";
