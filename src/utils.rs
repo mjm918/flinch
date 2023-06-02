@@ -1,6 +1,11 @@
+use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use crate::hdrs::{Sort, SortDirection};
+use anyhow::anyhow;
+use log::{error};
+use uuid::Uuid;
+use crate::headers::{FlinchCnf, Sort, SortDirection};
 
 pub struct ExecTime {
     timer: Instant,
@@ -22,12 +27,25 @@ impl ExecTime {
         }
     }
 }
+pub static DBLIST_PREFIX: &str = ":db-list:";
+pub static DBUSER_PREFIX: &str = ":db-user:";
 pub static TTL_PREFIX: &str = ":ttl:";
 pub static COL_PREFIX: &str = ":collection:";
 pub static DOC_PREFIX: &str = ":document:";
 pub static TIMEOUT: Duration = Duration::from_secs(5);
 
-pub fn database_path() -> String { Path::new(".").join("dbs").to_str().unwrap().to_string() }
+pub fn database_path(name: Option<String>) -> String {
+    let mut db_name = "flinch".to_string();
+    if name.is_some() {
+        let name = name.unwrap();
+        db_name = name.to_owned();
+    }
+    Path::new(".")
+        .join(db_name)
+        .to_str()
+        .unwrap()
+        .to_string()
+}
 
 pub fn set_view_name(name: &str) -> String {
     format!(":view:{}",name)
@@ -100,4 +118,54 @@ pub fn parse_limit(opt: Option<String>) -> Option<(usize,usize)> {
             Some((offset, limit))
         }
     }
+}
+
+fn cnf_path() -> String {
+    Path::new(".")
+        .join("flinch.toml")
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
+pub fn cnf_content() -> anyhow::Result<FlinchCnf> {
+    let path = cnf_path();
+    if !Path::new(path.as_str()).exists() {
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .append(true)
+            .open(path.as_str())
+            .unwrap();
+        let cnf = FlinchCnf {
+            root: "root".to_string(),
+            pw: "flinch".to_string(),
+            data_dir: ".".to_string(),
+        };
+        let cnf = toml::to_string(&cnf);
+        if cnf.is_err() {
+            error!("error creating default config");
+            return Err(anyhow!(cnf.err().unwrap()));
+        }
+        let content = cnf.unwrap();
+        if let Err(err) = writeln!(file,"{}",content) {
+            error!("error writing default config {}",err);
+            return Err(anyhow!(err));
+        }
+    }
+    let content = fs::read_to_string(path.as_str());
+    if content.is_err() {
+        panic!("failed to read config file");
+    }
+    let content = content.unwrap();
+    let cnf = toml::from_str::<FlinchCnf>(content.as_str());
+    if cnf.is_err() {
+        panic!("failed to parse config file");
+    }
+    let cnf = cnf.unwrap();
+    Ok(cnf)
+}
+
+pub fn uuid() -> String {
+    Uuid::new_v4().as_hyphenated().to_string()
 }

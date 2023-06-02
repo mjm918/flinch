@@ -9,21 +9,20 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 use sled::Db;
-use uuid::Uuid;
-use crate::bkp::Bkp;
+use crate::persistent::Persistent;
 use crate::clips::Clips;
-use crate::doc::Document;
-use crate::db::CollectionOptions;
+use crate::document_trait::Document;
+use crate::database::CollectionOptions;
 use crate::err::{IndexError};
-use crate::ge::EVENT_EMITTER;
-use crate::hdrs::{PubSubEvent, ActionType, PubSubRes, FuncResult, FuncType};
-use crate::hidx::HashIndex;
-use crate::ividx::InvertedIndex;
-use crate::range::Range;
-use crate::pbsb::PubSub;
+use crate::global_events::EVENT_EMITTER;
+use crate::headers::{PubSubEvent, NotificationType, PubSubRes, FuncResult, FuncType};
+use crate::index_hash::HashIndex;
+use crate::index_inverted::InvertedIndex;
+use crate::range_filter::Range;
+use crate::pub_sub::PubSub;
 use crate::ttl::{Entry, Ttl};
-use crate::utils::{ExecTime, get_ttl_name, prefix_doc, prefix_ttl, TTL_PREFIX};
-use crate::wtch::Watchman;
+use crate::utils::{ExecTime, get_ttl_name, prefix_doc, prefix_ttl, TTL_PREFIX, uuid};
+use crate::watchman::Watchman;
 
 pub type ExecutionTime = String;
 pub type K = String;
@@ -31,7 +30,7 @@ pub type K = String;
 /// Collection is a document storage
 pub struct Collection<D: Document> {
     ttl: Arc<Ttl>,
-    bkp: Bkp,
+    bkp: Persistent,
     kv: DashMap<K, D>,
     hash_idx: HashIndex<K>,
     inverted_idx: InvertedIndex<K>,
@@ -54,7 +53,7 @@ where
         let ttl = Arc::new(Ttl::new(option.name.as_str()));
         let instance = Arc::new(Self {
             ttl,
-            bkp: Bkp::new(&db, option.name.as_str()),
+            bkp: Persistent::open(&db, option.name.as_str()),
             kv: DashMap::new(),
             hash_idx: HashIndex::new(),
             inverted_idx: InvertedIndex::new(),
@@ -110,7 +109,7 @@ where
 
     /// sets a TTL for a `Pointer`
     pub async fn put_ttl(&self, k: K, timestamp: i64) {
-        self.bkp.put_any(prefix_ttl(k.as_str()), timestamp).await;
+        self.bkp.put_any(prefix_ttl(k.as_str()), timestamp);
         self.ttl.push(timestamp, k);
     }
 
@@ -161,7 +160,7 @@ where
             self.bkp.put(prefix_doc(k.as_str()),v.clone());
         }
 
-        let query = ActionType::Insert(k.to_string(), v);
+        let query = NotificationType::Insert(k.to_string(), v);
         let _ = self.watchman.notify(PubSubEvent::Data(query));
 
         Ok(exec.done())
@@ -177,7 +176,7 @@ where
     pub async fn _delete(&self, k: K, rm_ttl: bool) -> ExecutionTime {
         let exec = ExecTime::new();
         if self.kv.contains_key(&k) {
-            let query = ActionType::<K,D>::Remove(k.clone());
+            let query = NotificationType::<K,D>::Remove(k.clone());
             let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
 
             let (_, v) = self.kv.remove(&k).unwrap();
@@ -426,7 +425,7 @@ where
     /// generates an UUID. can use it as a pointer
     #[inline]
     pub fn id(&self) -> String {
-        Uuid::new_v4().as_hyphenated().to_string()
+        uuid()
     }
 
     /// truncate current collection

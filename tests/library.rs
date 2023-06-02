@@ -3,10 +3,10 @@ mod tests {
     use std::time::Instant;
     use log::debug;
     use serde::{Deserialize, Serialize};
-    use flinch::db::{CollectionOptions, Database};
-    use flinch::doc::{Document, ViewConfig};
-    use flinch::docv::QueryBased;
-    use flinch::hdrs::{ActionType, PubSubEvent};
+    use flinch::database::{CollectionOptions, Database};
+    use flinch::document_trait::{Document, ViewConfig};
+    use flinch::document::QueryBased;
+    use flinch::headers::{NotificationType, PubSubEvent};
 
     const COLLECTION: &str = "demo";
     #[derive(Serialize, Deserialize)]
@@ -14,6 +14,7 @@ mod tests {
         name: String,
         age: i64
     }
+
     #[tokio::test]
     async fn library() {
         let col_opts = CollectionOptions {

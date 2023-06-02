@@ -12,11 +12,11 @@ pub struct Listener {
 }
 
 #[derive(Default)]
-pub struct EventEmitter {
+pub struct GlobalEvents {
     pub listeners: HashMap<String, Vec<Listener>>
 }
 
-impl EventEmitter {
+impl GlobalEvents {
     pub fn new() -> Self {
         Self {
             listeners: HashMap::new()
@@ -72,6 +72,7 @@ impl EventEmitter {
         return callback_handlers;
     }
 
+    #[allow(dead_code)]
     pub fn remove_listener(&mut self, id_to_delete: &str) -> Option<String> {
         for (_,event_listeners) in self.listeners.iter_mut() {
             if let Some(index) = event_listeners.iter().position(|listener| listener.id == id_to_delete) {
@@ -108,6 +109,7 @@ impl EventEmitter {
         return id;
     }
 
+    #[allow(dead_code)]
     pub fn once<F, T>(&mut self, event: &str, callback: F) -> String
         where
                 for<'de> T: Deserialize<'de> + bincode::Decode,
@@ -119,5 +121,5 @@ impl EventEmitter {
 }
 
 lazy_static::lazy_static! {
-    pub static ref EVENT_EMITTER: Mutex<EventEmitter> = Mutex::new(EventEmitter::new());
+    pub static ref EVENT_EMITTER: Mutex<GlobalEvents> = Mutex::new(GlobalEvents::new());
 }

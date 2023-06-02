@@ -10,7 +10,7 @@ use rayon::iter::IntoParallelRefIterator;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::doc::Document;
+use crate::document_trait::Document;
 use crate::err::IndexError;
 
 pub struct HashIndex<K> {

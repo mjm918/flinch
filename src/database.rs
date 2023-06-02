@@ -10,15 +10,15 @@ use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
 use size::{Base, Size};
 use sled::Db;
-use crate::bkp::Bkp;
-use crate::doc::{Document, ViewConfig};
+use crate::persistent::Persistent;
+use crate::document_trait::{Document, ViewConfig};
 use crate::err::{CollectionError};
-use crate::col::{Collection};
+use crate::collection::{Collection};
 use crate::utils::{COL_PREFIX, database_path, get_col_name, prefix_col_name};
 use crate::zalloc::Zalloc;
 
 #[global_allocator]
-static ZALLOC_MESSURE: Zalloc<System> = Zalloc::new(System);
+static ALLOCMEASURE: Zalloc<System> = Zalloc::new(System);
 
 /// `CollectionOptions` is used while creating a collection
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -34,7 +34,7 @@ pub struct CollectionOptions {
 pub struct Database<D> where D: Document + 'static {
     storage: Arc<DashMap<String, Arc<Collection<D>>>>,
     persist: Db,
-    internal_tree: Bkp
+    internal_tree: Persistent
 }
 
 impl<D> Database<D>
@@ -47,13 +47,21 @@ impl<D> Database<D>
     /// 2. creates persistent storage
     /// 3. boots previously created collections
     pub async fn init() -> Self {
-        /// Reset allocation count
-        ZALLOC_MESSURE.reset();
-        /// Set database logger
+        Self::boot(None).await
+    }
+
+    pub async fn init_with_name(name: &str) -> Self {
+        Self::boot(Some(name.to_string())).await
+    }
+
+    async fn boot(name: Option<String>) -> Self {
+        // Reset allocation count
+        ALLOCMEASURE.reset();
+        // Set database logger
         let logger = SimpleLogger::new()
             .with_module_level("sled", log::LevelFilter::Info)
             .with_colors(true)
-            .with_level(log::LevelFilter::Trace)
+            .with_level(log::LevelFilter::Debug)
             .init();
         if logger.is_ok() {
             logger.unwrap();
@@ -61,8 +69,8 @@ impl<D> Database<D>
             error!("{:?}",logger.err().unwrap());
         }
         let storage = DashMap::new();
-        let persist = sled::open(database_path()).unwrap();
-        let internal_tree = Bkp::new(&persist,"__flinch_internal");
+        let persist = sled::open(database_path(name)).unwrap();
+        let internal_tree = Persistent::open(&persist, "__flinch_internal");
 
         let existing = internal_tree.prefix(format!("{}",COL_PREFIX));
         for exi in existing {
@@ -91,7 +99,7 @@ impl<D> Database<D>
     fn watch_memory(&self) {
         std::thread::spawn(move ||{
             loop {
-                trace!("memory used: {}", Size::from_bytes(ZALLOC_MESSURE.get()).format().with_base(Base::Base10));
+                trace!("memory used: {}", Size::from_bytes(ALLOCMEASURE.get()).format().with_base(Base::Base10));
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
         });
@@ -110,7 +118,7 @@ impl<D> Database<D>
         }
         let col = Collection::<D>::new(&self.persist, opts.to_owned()).await;
         self.storage.insert(name.to_owned(), col);
-        self.internal_tree.put_any(prefix_col_name(name.as_str()), opts).await;
+        self.internal_tree.put_any(prefix_col_name(name.as_str()), opts);
 
         info!("collection - {} added",name);
 
@@ -135,6 +143,7 @@ impl<D> Database<D>
         col.value().empty().await;
         self.storage.remove(name);
         self.internal_tree.remove(prefix_col_name(name)).expect("remove from local storage");
+        self.persist.drop_tree(name).expect("drop collection from local storage");
 
         warn!("collection - {} dropped",name);
 

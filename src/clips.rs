@@ -7,7 +7,7 @@ use log::trace;
 use rayon::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use crate::doc::Document;
+use crate::document_trait::Document;
 use crate::utils::set_view_name;
 
 pub struct Clips<K> {

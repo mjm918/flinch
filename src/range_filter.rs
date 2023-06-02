@@ -7,7 +7,7 @@ use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::doc::Document;
+use crate::document_trait::Document;
 
 pub struct Range<K> {
     pub tree: DashMap<String, BTreeMap<String, DashSet<K>>>,

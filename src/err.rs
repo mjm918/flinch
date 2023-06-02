@@ -64,3 +64,17 @@ pub enum QueryError {
     #[error("no result found")]
     NoResult
 }
+
+#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
+pub enum DbError {
+    #[error("database `{0}` exists")]
+    DbExists(String),
+    #[error("database `{0}` does not exists")]
+    DbNotExists(String),
+    #[error("user `{0}` exists")]
+    UserExists(String),
+    #[error("invalid permission config provided")]
+    InvalidPermissionConfig,
+    #[error("error parsing config file")]
+    ErrorParsingConfig
+}

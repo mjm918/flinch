@@ -18,7 +18,7 @@ pub enum Request<M> {
 
 /// `ActionType` is used for pubsub
 #[derive(Serialize, Deserialize, Clone)]
-pub enum ActionType<K, D> {
+pub enum NotificationType<K, D> {
     Insert(K, D),
     Remove(K),
 }
@@ -26,7 +26,7 @@ pub enum ActionType<K, D> {
 /// `PubSubEvent` is used for pubsub
 #[derive(Clone)]
 pub enum PubSubEvent<K, D> {
-    Data(ActionType<K, D>),
+    Data(NotificationType<K, D>),
     Subscribed(Sender<PubSubEvent<K, D>>),
 }
 
@@ -78,9 +78,15 @@ pub enum FlinchError {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ActionResult {
+pub struct QueryResult {
     pub data: Vec<Value>,
     pub error: FlinchError,
     pub time_taken: String
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FlinchCnf {
+    pub root: String,
+    pub pw: String,
+    pub data_dir: String
+}

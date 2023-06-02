@@ -1,8 +1,8 @@
 use anyhow::{Result};
 use tokio::sync::mpsc::{channel, Sender};
 use crate::err::WatcherError;
-use crate::hdrs::{DestinationDown, Request, WatcherState};
-use crate::pbsb::PubSub;
+use crate::headers::{DestinationDown, Request, WatcherState};
+use crate::pub_sub::PubSub;
 
 pub struct Watchman<M> {
     idx: usize,
@@ -81,6 +81,7 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
         let _ = self.chans[self.chans.len() - 1].send(msg).await;
     }
 
+    #[allow(dead_code)]
     fn next(&mut self) -> usize {
         let mut index = self.idx;
         self.idx += 1;

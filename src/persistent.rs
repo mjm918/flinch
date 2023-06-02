@@ -3,32 +3,31 @@ use log::trace;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sled::{Tree, Iter, IVec, Db};
-use tokio::task::JoinHandle;
-use crate::doc::Document;
+use crate::document_trait::Document;
 use crate::utils::{DOC_PREFIX, get_doc_name};
 
-pub struct Bkp {
+pub struct Persistent {
     tree: Arc<Tree>
 }
 
-impl Bkp {
-    pub fn new(db: &Db, name: &str) -> Self {
+impl Persistent {
+    pub fn open(db: &Db, name: &str) -> Self {
         let tree = Arc::new(db.open_tree(name).unwrap());
         Self { tree }
     }
 
     pub fn put<D>(&self, k: String, d: D) where
         D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document {
-        self.tree.insert(k.to_owned(),IVec::from(d.string().as_str())).expect(format!("inserting {} into local storage",&k).as_str());
+        self.tree
+            .insert(k.to_owned(),IVec::from(d.string().as_str()))
+            .expect(format!("inserting {} into local storage",&k).as_str());
     }
 
-    pub async fn put_any<D>(&self, k: String, d: D) -> JoinHandle<sled::Result<Option<IVec>>>
+    pub fn put_any<D>(&self, k: String, d: D)
         where D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static {
-        let rt = self.tree.clone();
-        tokio::spawn(async move {
-            trace!("{} - key inserted into storage",&k);
-            rt.insert(k,IVec::from(serde_json::to_string(&d).unwrap().as_bytes()))
-        })
+        self.tree
+            .insert(k.to_owned(),IVec::from(serde_json::to_string(&d).unwrap().as_bytes()))
+            .expect(format!("inserting TTL {} into local storage",&k).as_str());
     }
 
     pub fn remove(&self, k: String) -> sled::Result<Option<IVec>> {
@@ -65,6 +64,7 @@ impl Bkp {
             .collect::<Vec<(String, String)>>()
     }
 
+    #[allow(dead_code)]
     pub fn iter(&self) -> Iter {
         self.tree.iter()
     }

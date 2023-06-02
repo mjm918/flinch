@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use log::{trace};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::ge::EVENT_EMITTER;
+use crate::global_events::EVENT_EMITTER;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
 pub struct Entry {
@@ -31,6 +31,7 @@ impl Ttl {
         self.kv.insert(ttl, Entry { key, reg_at: chrono::Local::now().timestamp() });
     }
 
+    #[allow(dead_code)]
     pub fn never(&self, key: String) -> i64 {
         let future = chrono::Local::now() + chrono::Duration::days(365 * 30);
         let ttl = future.timestamp();

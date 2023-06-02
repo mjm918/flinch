@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::err::{DocumentError};
-use crate::db::CollectionOptions;
+use crate::database::CollectionOptions;
 
 /// `Field` is used in `CollectionOptions`
 /// for range configuration

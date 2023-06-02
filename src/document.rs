@@ -1,7 +1,7 @@
 use serde_json::{Map, Value};
 use serde::{Deserialize, Serialize};
-use crate::db::CollectionOptions;
-use crate::doc::{Clips, Document, DocumentSearch, Field, Index, Range, View, ViewConfig};
+use crate::database::CollectionOptions;
+use crate::document_trait::{Clips, Document, DocumentSearch, Field, Index, Range, View, ViewConfig};
 use crate::err::DocumentError;
 
 #[derive(Clone, Serialize, Deserialize)]

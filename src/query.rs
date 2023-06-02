@@ -7,11 +7,11 @@ use futures::executor::{block_on};
 use log::{debug, trace};
 use serde_json::{Number, Value};
 use tokio::sync::mpsc::Sender;
-use crate::db::{CollectionOptions, Database};
-use crate::doc::Document;
-use crate::docv::QueryBased;
+use crate::database::{CollectionOptions, Database};
+use crate::document_trait::Document;
+use crate::document::QueryBased;
 use crate::err::{CollectionError, DocumentError, IndexError, QueryError};
-use crate::hdrs::{ActionResult, FlinchError, PubSubEvent, Sort, SortDirection};
+use crate::headers::{QueryResult, FlinchError, PubSubEvent, Sort, SortDirection};
 use crate::utils::{parse_limit, parse_sort, trim_apos};
 
 /// creates a `Query` session for
@@ -28,6 +28,16 @@ impl Query {
         Self { db, current: "".to_string() }
     }
 
+    /// creates an instance of `Flinch` database with name
+    pub async fn new_with_name(name: &str) -> Self {
+        let db = Database::<QueryBased>::init_with_name(name).await;
+        Self { db, current: "".to_string() }
+    }
+
+    pub fn underlying_db(&self) -> &Database<QueryBased> {
+        &self.db
+    }
+
     /// `pubsub` for new documents or remove document event
     pub async fn subscribe(&self, name:&str, sx: Sender<PubSubEvent<String, QueryBased>>) -> Result<(), FlinchError> {
         let col = self.db.using(name);
@@ -39,14 +49,14 @@ impl Query {
     }
 
     /// expect an argument `flql` statement
-    pub async fn exec(&mut self, stmt: &str) -> ActionResult {
+    pub async fn exec(&mut self, stmt: &str) -> QueryResult {
         trace!("flql executing {}", &stmt.chars().take(60).collect::<String>());
 
         self.current = format!("{}",&stmt);
 
         let parsed = flql::parse(stmt);
         if parsed.is_err() {
-            return ActionResult{
+            return QueryResult {
                 data: vec![],
                 error: FlinchError::CustomError(parsed.err().unwrap()),
                 time_taken: "".to_string(),
@@ -54,11 +64,15 @@ impl Query {
         }
 
         let parsed = parsed.unwrap();
+        self.exec_with_flql(parsed).await
+    }
+
+    pub async fn exec_with_flql(&self, parsed: Flql) -> QueryResult {
         match parsed {
             Flql::New(options) => {
                 let ttk = Instant::now();
                 let x = self.new_c(options).await;
-                ActionResult {
+                QueryResult {
                     data: vec![],
                     error: self.err_q(x.err()),
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -67,7 +81,7 @@ impl Query {
             Flql::Drop(collection) => {
                 let ttk = Instant::now();
                 let x = self.db.drop(collection.as_str()).await;
-                ActionResult {
+                QueryResult {
                     data: vec![],
                     error: self.err_c(x.err()),
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -77,7 +91,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -85,7 +99,7 @@ impl Query {
                 }
                 let col = col.unwrap();
                 col.flush_bkp().await;
-                ActionResult {
+                QueryResult {
                     data: vec![],
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -95,7 +109,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -109,7 +123,7 @@ impl Query {
                 } else {
                     vec![Value::Bool(false)]
                 };
-                ActionResult{
+                QueryResult {
                     data: res,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -119,7 +133,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -127,7 +141,7 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let ttk = Instant::now();
-                ActionResult{
+                QueryResult {
                     data: vec![Value::Number(Number::from(col.len()))],
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -137,7 +151,7 @@ impl Query {
                 let ttk = Instant::now();
                 let timestamp = duration.parse::<i64>();
                 if timestamp.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_s(format!("{} is malformed as a TTL value",duration)),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -145,7 +159,7 @@ impl Query {
                 }
                 let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_s(expression.err().unwrap().to_string()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -153,7 +167,7 @@ impl Query {
                 }
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -187,7 +201,7 @@ impl Query {
                 }
                 let message = format!("TTL was set for {} keys", data.len());
                 let data = vec![Value::String(message)];
-                ActionResult{
+                QueryResult {
                     data,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -197,7 +211,7 @@ impl Query {
                 let ttk = Instant::now();
                 let qdata = QueryBased::from_str(data.as_str());
                 if qdata.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_d(qdata.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -205,7 +219,7 @@ impl Query {
                 }
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -215,7 +229,7 @@ impl Query {
                 let ttk = Instant::now();
                 let id = col.id();
                 let x = col.put(id.clone(), qdata.unwrap()).await;
-                ActionResult{
+                QueryResult {
                     data: vec![Value::String(id)],
                     error: self.err_i(x.err()),
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -225,7 +239,7 @@ impl Query {
                 let ttk = Instant::now();
                 let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_s(expression.err().unwrap().to_string()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -233,7 +247,7 @@ impl Query {
                 }
                 let qdata = QueryBased::from_str(data.as_str());
                 if qdata.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_d(qdata.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -241,7 +255,7 @@ impl Query {
                 }
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -270,7 +284,7 @@ impl Query {
                     }
                 });
                 let ids = sg.into_iter().collect();
-                ActionResult{
+                QueryResult {
                     data: ids,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -280,7 +294,7 @@ impl Query {
                 let ttk = Instant::now();
                 let qdata = QueryBased::from_str(data.as_str());
                 if qdata.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_d(qdata.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -288,7 +302,7 @@ impl Query {
                 }
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -302,7 +316,7 @@ impl Query {
                 if x.is_ok() {
                     time_taken = x.unwrap();
                 }
-                ActionResult{
+                QueryResult {
                     data: vec![],
                     error: FlinchError::None,
                     time_taken,
@@ -312,7 +326,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -323,7 +337,7 @@ impl Query {
                 let res = col.search(trim_apos(&query).as_str());
                 let time_taken = format!("{:?}",ttk.elapsed());
                 let data = res.data.into_iter().map(|kv|kv.1.document().clone()).collect::<Vec<Value>>();
-                ActionResult{
+                QueryResult {
                     data,
                     error: FlinchError::None,
                     time_taken,
@@ -333,7 +347,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -355,7 +369,7 @@ impl Query {
                     sort
                 );
 
-                ActionResult{
+                QueryResult {
                     data: if let Some((offset, limit)) = limit {
                         data[offset..(offset + limit)].to_owned()
                     } else {
@@ -369,7 +383,7 @@ impl Query {
                 let ttk = Instant::now();
                 let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_s(expression.err().unwrap().to_string()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -377,7 +391,7 @@ impl Query {
                 }
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -411,7 +425,7 @@ impl Query {
                     &mut data,
                     sort
                 );
-                ActionResult{
+                QueryResult {
                     data: if let Some((offset, limit)) = limit {
                         data[offset..(offset + limit)].to_owned()
                     } else {
@@ -425,14 +439,14 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
                     };
                 }
                 let col = col.unwrap();
-                
+
                 let v = col.get(&pointer);
                 let mut time_taken = format!("{:?}",ttk.elapsed());
                 let mut res = vec![];
@@ -442,7 +456,7 @@ impl Query {
                     let d = v.data.unwrap();
                     res = vec![d.1.make(d.0)];
                 }
-                ActionResult{
+                QueryResult {
                     data: res,
                     error: FlinchError::None,
                     time_taken,
@@ -452,14 +466,14 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
                     };
                 }
                 let col = col.unwrap();
-                
+
                 let v = col.fetch_view(&view);
 
                 let mut time_taken = format!("{:?}",ttk.elapsed());
@@ -473,7 +487,7 @@ impl Query {
                     });
                     res = sg.into_iter().collect();
                 }
-                ActionResult{
+                QueryResult {
                     data: res,
                     error: FlinchError::None,
                     time_taken,
@@ -483,7 +497,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -497,10 +511,10 @@ impl Query {
                 let data = c.data;
                 let sg = SegQueue::new();
                 data.par_iter().for_each(|kv|{
-                   sg.push(kv.1.make(kv.0.to_owned()));
+                    sg.push(kv.1.make(kv.0.to_owned()));
                 });
                 let res = sg.into_iter().collect();
-                ActionResult{
+                QueryResult {
                     data: res,
                     error: FlinchError::None,
                     time_taken,
@@ -510,7 +524,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -524,7 +538,7 @@ impl Query {
                     let y = x.data.unwrap();
                     data.push(y.1.make(y.0));
                 }
-                ActionResult{
+                QueryResult {
                     data,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -534,7 +548,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -544,7 +558,7 @@ impl Query {
                 let ttk = Instant::now();
                 let res = col.fetch_range(trim_apos(&on).as_str(), trim_apos(&start), trim_apos(&end));
                 let data = res.data.iter().map(|kv|kv.1.make(kv.0.to_owned())).collect::<Vec<Value>>();
-                ActionResult{
+                QueryResult {
                     data,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -554,7 +568,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -563,7 +577,7 @@ impl Query {
                 let col = col.unwrap();
                 let ttk = Instant::now();
                 let _ = col.empty().await;
-                ActionResult{
+                QueryResult {
                     data: vec![],
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed())
@@ -573,7 +587,7 @@ impl Query {
                 let ttk = Instant::now();
                 let expression = flql::expr_parse(trim_apos(&condition).as_str());
                 if expression.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_s(expression.err().unwrap().to_string()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -581,7 +595,7 @@ impl Query {
                 }
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -607,7 +621,7 @@ impl Query {
                     }
                 });
                 let res = sg.into_iter().map(|s|Value::String(s)).collect::<Vec<Value>>();
-                ActionResult{
+                QueryResult {
                     data: res,
                     error: FlinchError::None,
                     time_taken: format!("{:?}",ttk.elapsed()),
@@ -617,7 +631,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -625,7 +639,7 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let x = col.delete(pointer.to_string()).await;
-                ActionResult{
+                QueryResult {
                     data: vec![Value::String(pointer)],
                     error: FlinchError::None,
                     time_taken: x,
@@ -635,7 +649,7 @@ impl Query {
                 let ttk = Instant::now();
                 let col = self.db.using(trim_apos(&collection).as_str());
                 if col.is_err() {
-                    return ActionResult{
+                    return QueryResult {
                         data: vec![],
                         error: self.err_c(col.err()),
                         time_taken: format!("{:?}",ttk.elapsed()),
@@ -643,14 +657,14 @@ impl Query {
                 }
                 let col = col.unwrap();
                 let x = col.delete_by_clip(clip.as_str()).await;
-                ActionResult{
+                QueryResult {
                     data: vec![Value::String(clip)],
                     error: FlinchError::None,
                     time_taken: x,
                 }
             }
             _ => {
-                ActionResult{
+                QueryResult {
                     data: vec![],
                     error: FlinchError::None,
                     time_taken: "".to_string(),
@@ -671,6 +685,33 @@ impl Query {
             return Err(QueryError::ConfigureParseError(parsed.err().unwrap().to_string()));
         }
         Ok(())
+    }
+    
+    async fn col_new(&self, options: String) -> QueryResult {
+        let ttk = Instant::now();
+        let parsed:serde_json::Result<CollectionOptions> = serde_json::from_str(options.as_str());
+        if parsed.is_ok() {
+            let opts = parsed.unwrap();
+            let x = self.db.add(opts).await;
+            if x.is_err() {
+                return QueryResult {
+                    data: vec![],
+                    error: self.err_q(Some(QueryError::CollectionError(x.err().unwrap()))),
+                    time_taken: format!("{:?}",ttk.elapsed()),
+                };
+            }
+        } else {
+            return QueryResult {
+                data: vec![],
+                error: self.err_q(Some(QueryError::ConfigureParseError(parsed.err().unwrap().to_string()))),
+                time_taken: format!("{:?}",ttk.elapsed()),
+            };
+        }
+        QueryResult {
+            data: vec![],
+            error: FlinchError::None,
+            time_taken: format!("{:?}",ttk.elapsed()),
+        }
     }
 
     fn proc(&self, data: &mut Vec<Value>, sort: Option<Sort>) {

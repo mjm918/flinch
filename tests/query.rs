@@ -2,10 +2,10 @@
 mod tests {
     use log::debug;
     use serde::{Deserialize, Serialize};
-    use flinch::db::CollectionOptions;
-    use flinch::doc::ViewConfig;
-    use flinch::hdrs::{ActionType, FlinchError, PubSubEvent};
-    use flinch::qry::Query;
+    use flinch::database::CollectionOptions;
+    use flinch::document_trait::ViewConfig;
+    use flinch::headers::{NotificationType, FlinchError, PubSubEvent};
+    use flinch::query::Query;
 
     const COLLECTION: &str = "demo";
     #[derive(Serialize, Deserialize)]
