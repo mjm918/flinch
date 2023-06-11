@@ -39,12 +39,12 @@ pub struct Collection<D: Document> {
     clips: Clips<K>,
     range: Range<K>,
     watchman: PubSub<PubSubEvent<K, D>>,
-    pub opts: CollectionOptions
+    pub opts: CollectionOptions,
 }
 
-impl<D> Collection< D>
-where
-    D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document
+impl<D> Collection<D>
+    where
+        D: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Document
 {
     /// create a new collection based on `sled` instance and `CollectionOptions`.
     /// boots previously inserted data
@@ -62,13 +62,13 @@ where
             clips: Clips::new(),
             range: Range::new(),
             watchman: Watchman::<PubSubEvent<K, D>>::new(vec![]).unwrap().start(),
-            opts
+            opts,
         });
         instance.boot().await;
 
         let runtime = tokio::runtime::Handle::current();
         let this = Arc::clone(&instance);
-        EVENT_EMITTER.lock().unwrap().on("expired",move|entry: Entry|{
+        EVENT_EMITTER.lock().unwrap().on("expired", move |entry: Entry| {
             runtime.block_on(async {
                 trace!("expired key - {:?}",&entry);
                 this._delete(entry.key, true).await;
@@ -97,13 +97,13 @@ where
         }
         debug!("booting TTL engine");
         let ttl = Arc::clone(&self.ttl);
-        std::thread::spawn(move ||{
+        std::thread::spawn(move || {
             ttl.start();
         });
     }
 
     /// `pubsub` subscriber for Insert or Delete event
-    pub async fn sub(&self, sx: tokio::sync::mpsc::Sender<PubSubEvent<K,D>>) -> Result<(), PubSubRes> {
+    pub async fn sub(&self, sx: tokio::sync::mpsc::Sender<PubSubEvent<K, D>>) -> Result<(), PubSubRes> {
         debug!("subscriber added to watchman");
         let _ = self.watchman.notify(PubSubEvent::Subscribed(sx.clone())).await;
         self.watchman.reg(sx).await
@@ -159,7 +159,7 @@ where
 
         self.kv.insert(k.to_string(), v.clone());
         if new {
-            self.bkp.put(prefix_doc(k.as_str()),v.clone());
+            self.bkp.put(prefix_doc(k.as_str()), v.clone());
         }
 
         let query = NotificationType::Insert(k.to_string(), v);
@@ -178,7 +178,7 @@ where
     pub async fn _delete(&self, k: K, rm_ttl: bool) -> ExecutionTime {
         let exec = ExecTime::new();
         if self.kv.contains_key(&k) {
-            let query = NotificationType::<K,D>::Remove(k.clone());
+            let query = NotificationType::<K, D>::Remove(k.clone());
             let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
 
             let (_, v) = self.kv.remove(&k).unwrap();
@@ -232,8 +232,8 @@ where
     pub fn multi_get(&self, keys: Vec<&K>) -> FuncResult<Vec<(K, D)>> {
         let exec = ExecTime::new();
         let mut res = Vec::with_capacity(keys.len());
-        keys.iter().for_each(|k|{
-            if let Some(v) = self.kv.get(k.clone()){
+        keys.iter().for_each(|k| {
+            if let Some(v) = self.kv.get(k.clone()) {
                 let pair = v.pair();
                 res.push((pair.0.clone(), pair.1.clone()));
             }
@@ -241,7 +241,7 @@ where
         FuncResult {
             query: FuncType::LookupMulti,
             data: res,
-            time_taken: exec.done()
+            time_taken: exec.done(),
         }
     }
 
@@ -276,7 +276,7 @@ where
         FuncResult {
             query: FuncType::Lookup,
             data: res,
-            time_taken: exec.done()
+            time_taken: exec.done(),
         }
     }
 
@@ -300,7 +300,7 @@ where
         FuncResult {
             query: FuncType::LookupIndex(index.to_string()),
             data: res,
-            time_taken: exec.done()
+            time_taken: exec.done(),
         }
     }
 
@@ -324,7 +324,7 @@ where
         FuncResult {
             query: FuncType::FetchClip(clip.to_string()),
             data: res,
-            time_taken: exec.done()
+            time_taken: exec.done(),
         }
     }
 
@@ -369,7 +369,7 @@ where
         FuncResult {
             query: FuncType::Lookup,
             data: res,
-            time_taken: exec.done()
+            time_taken: exec.done(),
         }
     }
 
@@ -382,7 +382,7 @@ where
         let keys = self.inverted_idx.w_find(words);
         if keys.len() > 0 {
             let res = ArrayQueue::new(keys.len());
-            keys.par_iter().for_each(|key|{
+            keys.par_iter().for_each(|key| {
                 if let Some(kv) = self.kv.get(key) {
                     let pair = kv.pair();
                     let _ = res.push((pair.0.clone(), pair.1.clone()));
@@ -391,13 +391,13 @@ where
             FuncResult {
                 query: FuncType::LikeSearch(text),
                 data: res,
-                time_taken: exec.done()
+                time_taken: exec.done(),
             }
         } else {
             FuncResult {
                 query: FuncType::LikeSearch(text),
                 data: ArrayQueue::new(1),
-                time_taken: exec.done()
+                time_taken: exec.done(),
             }
         }
     }

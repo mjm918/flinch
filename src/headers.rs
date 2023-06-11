@@ -2,7 +2,25 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
 
-use crate::errors::{CollectionError, DocumentError, IndexError, QueryError};
+use crate::errors::{CollectionError, DbError, DocumentError, IndexError, QueryError};
+
+pub type DbName = String;
+pub type SessionId = String;
+pub type UserName = String;
+pub type Password = String;
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct DbUser {
+    pub name: UserName,
+    pub pw: Password,
+    pub db: DbName,
+    pub create: bool,
+    pub drop: bool,
+    pub read: bool,
+    pub write: bool,
+    pub permit: bool,
+    pub flush: bool,
+}
 
 #[allow(dead_code)]
 pub enum WatcherState {
@@ -12,9 +30,10 @@ pub enum WatcherState {
 }
 
 pub struct DestinationDown<M>(M);
+
 pub enum Request<M> {
     Register(Sender<M>),
-    Dispatch(M)
+    Dispatch(M),
 }
 
 /// `ActionType` is used for pubsub
@@ -40,12 +59,12 @@ pub enum PubSubRes {
 
 pub enum SortDirection {
     Asc,
-    Desc
+    Desc,
 }
 
 pub struct Sort {
     pub field: String,
-    pub direction: SortDirection
+    pub direction: SortDirection,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -57,14 +76,14 @@ pub enum FuncType {
     FetchView(String),
     FetchClip(String),
     FetchRange(String),
-    Query(String)
+    Query(String),
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FuncResult<T> {
     pub query: FuncType,
     pub data: T,
-    pub time_taken: String
+    pub time_taken: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -75,19 +94,30 @@ pub enum FlinchError {
     DocumentError(DocumentError),
     CustomError(String),
     IndexError(IndexError),
-    None
+    SchemaError(DbError),
+    None,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct QueryResult {
     pub data: Vec<Value>,
     pub error: FlinchError,
-    pub time_taken: String
+    pub time_taken: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FlinchCnf {
     pub root: String,
     pub pw: String,
-    pub data_dir: String
+    pub data_dir: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum PermissionTypes {
+    AssignUser,
+    CreateCollection,
+    DropCollection,
+    Read,
+    Write,
+    Flush,
 }

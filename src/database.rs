@@ -33,15 +33,16 @@ pub struct CollectionOptions {
     pub range_opts: Vec<String>,
     pub clips_opts: Vec<String>,
 }
+
 /// `Database<D>` keeps a bunch of collections. Where `D` inherits `Document`
 pub struct Database<D> where D: Document + 'static {
     storage: Arc<DashMap<String, Arc<Collection<D>>>>,
     persist: Db,
-    internal_tree: Persistent
+    internal_tree: Persistent,
 }
 
 impl<D> Database<D>
-     where D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync
+    where D: Serialize + DeserializeOwned + Clone + Send + 'static + Document + Sync
 {
     /// Creates an instance of Flinch database.
     /// Flinch uses sled as persistent storage
@@ -75,13 +76,13 @@ impl<D> Database<D>
         let persist = sled::open(database_path(name)).unwrap();
         let internal_tree = Persistent::open(&persist, "__flinch_internal");
 
-        let existing = internal_tree.prefix(format!("{}",COL_PREFIX));
+        let existing = internal_tree.prefix(format!("{}", COL_PREFIX));
         for exi in existing {
             let options = serde_json::from_str::<CollectionOptions>(exi.1.as_str());
             if options.is_ok() {
                 let options = options.unwrap();
                 let name = &options.name;
-                let col = Collection::<D>::new(&persist,options.to_owned()).await;
+                let col = Collection::<D>::new(&persist, options.to_owned()).await;
 
                 storage.insert(name.to_owned(), col);
                 info!("booted collection {}",get_col_name(exi.0.as_str()));
@@ -92,7 +93,7 @@ impl<D> Database<D>
         let instance = Self {
             storage: Arc::new(storage),
             persist,
-            internal_tree
+            internal_tree,
         };
         instance.watch_memory();
         instance
@@ -100,7 +101,7 @@ impl<D> Database<D>
 
     /// watch current memory usage
     fn watch_memory(&self) {
-        std::thread::spawn(move ||{
+        std::thread::spawn(move || {
             loop {
                 trace!("memory used: {}", Size::from_bytes(ALLOCMEASURE.get()).format().with_base(Base::Base10));
                 std::thread::sleep(std::time::Duration::from_secs(1));
@@ -110,7 +111,7 @@ impl<D> Database<D>
 
     /// `ls` list out all the collections in the database
     pub fn ls(&self) -> Vec<String> {
-        self.storage.iter().map(|kv|kv.key().to_string()).collect::<Vec<String>>()
+        self.storage.iter().map(|kv| kv.key().to_string()).collect::<Vec<String>>()
     }
 
     /// `add` allows you to create collection. Required argument `CollectionOptions`
@@ -129,7 +130,7 @@ impl<D> Database<D>
     }
 
     /// `using` returns a session of a collection by `name`
-    pub fn using(&self, name: &str) -> Result<Ref<String,Arc<Collection<D>>>, CollectionError> {
+    pub fn using(&self, name: &str) -> Result<Ref<String, Arc<Collection<D>>>, CollectionError> {
         if let Some(col) = self.storage.get(name) {
             return Ok(col);
         }

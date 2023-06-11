@@ -13,23 +13,23 @@ use crate::doc_trait::Document;
 use crate::utils::set_view_name;
 
 pub struct Clips<K> {
-    pub kv: DashMap<String, DashSet<K>>
+    pub kv: DashMap<String, DashSet<K>>,
 }
 
 impl<K> Clips<K>
-where K: Serialize +
-        DeserializeOwned +
-        PartialOrd +
-        Ord +
-        PartialEq +
-        Eq +
-        Hash +
-        Clone +
-        Send +
-        Sync +
-        Debug +
-        Display +
-        'static
+    where K: Serialize +
+    DeserializeOwned +
+    PartialOrd +
+    Ord +
+    PartialEq +
+    Eq +
+    Hash +
+    Clone +
+    Send +
+    Sync +
+    Debug +
+    Display +
+    'static
 {
     pub fn new() -> Self {
         Self {
@@ -38,7 +38,7 @@ where K: Serialize +
     }
 
     pub fn put<D>(&self, k: &K, v: &D) where D: Document {
-        v.tokens().into_iter().for_each(|idx|{
+        v.tokens().into_iter().for_each(|idx| {
             match self.kv.get_mut(&idx) {
                 None => {
                     let set = DashSet::new();
@@ -68,7 +68,7 @@ where K: Serialize +
 
     pub fn delete<D>(&self, k: &K, v: &D) where D: Document {
         trace!("deleting clip key {}",&k);
-        v.tokens().into_iter().for_each(|idx|{
+        v.tokens().into_iter().for_each(|idx| {
             if let Some(set) = self.kv.get_mut(&idx) {
                 set.value().remove(&k);
             }

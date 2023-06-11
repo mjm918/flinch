@@ -11,24 +11,19 @@ use crate::headers::{FlinchCnf, Sort, SortDirection};
 
 pub struct ExecTime {
     timer: Instant,
-    first_hit: String,
 }
 
 impl ExecTime {
     pub fn new() -> Self {
         Self {
-            timer: Instant::now(),
-            first_hit: "".to_string()
+            timer: Instant::now()
         }
     }
     pub fn done(&self) -> String {
-        if self.first_hit.is_empty() {
-            format!("{:?}", self.timer.elapsed())
-        } else {
-            format!("first hit {} time taken {:?}", self.first_hit, self.timer.elapsed())
-        }
+        format!("{:?}", self.timer.elapsed())
     }
 }
+
 pub static DBLIST_PREFIX: &str = ":db-list:";
 pub static DBUSER_PREFIX: &str = ":db-user:";
 pub static TTL_PREFIX: &str = ":ttl:";
@@ -50,18 +45,18 @@ pub fn database_path(name: Option<String>) -> String {
 }
 
 pub fn set_view_name(name: &str) -> String {
-    format!(":view:{}",name)
+    format!(":view:{}", name)
 }
 
 pub fn prefix_col_name(name: &str) -> String { format!("{}{}", COL_PREFIX, name) }
 
-pub fn prefix_doc(k: &str) -> String { format!("{}{}",DOC_PREFIX, k) }
+pub fn prefix_doc(k: &str) -> String { format!("{}{}", DOC_PREFIX, k) }
 
 pub fn prefix_ttl(key: &str) -> String { format!("{}{}", TTL_PREFIX, key) }
 
-pub fn get_col_name(name: &str) -> String { name.replace(COL_PREFIX,"") }
+pub fn get_col_name(name: &str) -> String { name.replace(COL_PREFIX, "") }
 
-pub fn get_doc_name(name: &str) -> String { name.replace(DOC_PREFIX,"") }
+pub fn get_doc_name(name: &str) -> String { name.replace(DOC_PREFIX, "") }
 
 pub fn get_ttl_name(name: &str) -> String { name.replace(TTL_PREFIX, "") }
 
@@ -103,12 +98,12 @@ pub fn parse_sort(opt: Option<String>) -> Option<Sort> {
                 "DESC" => SortDirection::Desc,
                 _ => SortDirection::Asc
             };
-            Some(Sort{ field: trim_apos(&field.to_string()), direction })
+            Some(Sort { field: trim_apos(&field.to_string()), direction })
         }
     }
 }
 
-pub fn parse_limit(opt: Option<String>) -> Option<(usize,usize)> {
+pub fn parse_limit(opt: Option<String>) -> Option<(usize, usize)> {
     match opt {
         None => { None }
         Some(ol) => {
@@ -150,7 +145,7 @@ pub fn cnf_content() -> anyhow::Result<FlinchCnf> {
             return Err(anyhow!(cnf.err().unwrap()));
         }
         let content = cnf.unwrap();
-        if let Err(err) = writeln!(file,"{}",content) {
+        if let Err(err) = writeln!(file, "{}", content) {
             error!("error writing default config {}",err);
             return Err(anyhow!(err));
         }

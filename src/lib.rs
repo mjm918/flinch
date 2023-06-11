@@ -11,6 +11,7 @@ mod persistent;
 mod ttl;
 mod events;
 mod zalloc;
+mod authenticate;
 
 pub mod doc_trait;
 pub mod collection;
@@ -19,3 +20,4 @@ pub mod headers;
 pub mod doc;
 pub mod query;
 pub mod schemas;
+

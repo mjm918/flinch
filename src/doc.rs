@@ -12,7 +12,7 @@ pub struct QueryBased {
     tokens: Option<Vec<String>>,
     fields: Option<Vec<String>>,
     view_cfg: Vec<ViewConfig>,
-    content: Option<Vec<String>>
+    content: Option<Vec<String>>,
 }
 
 impl Index for QueryBased {
@@ -76,12 +76,12 @@ impl Range for QueryBased {
                 let f = field.as_str();
                 if obj.contains_key(f.clone()) {
                     rfields.push(
-                        Field{
+                        Field {
                             key: f.clone().to_string(),
                             value: obj
                                 .get(f.clone())
                                 .unwrap()
-                                .to_string()
+                                .to_string(),
                         }
                     );
                 }
@@ -136,7 +136,6 @@ impl DocumentSearch for QueryBased {
 }
 
 impl Document for QueryBased {
-
     fn from_str(input: &str) -> anyhow::Result<Self, DocumentError> where Self: Sized {
         let raw = serde_json::from_str::<Value>(input);
         if raw.is_err() {

@@ -7,7 +7,7 @@ use crate::utils::TIMEOUT;
 
 #[derive(Clone, Debug)]
 pub struct PubSub<M> {
-    sender: Sender<Request<M>>
+    sender: Sender<Request<M>>,
 }
 
 impl<M> PubSub<M> where M: Send + 'static

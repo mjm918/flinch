@@ -1,39 +1,21 @@
+use std::time::Instant;
+
 use anyhow::anyhow;
 use dashmap::DashMap;
-use dashmap::mapref::one::RefMut;
-use log::warn;
-use serde::{Deserialize, Serialize};
+use flql::Flql;
 
+use crate::authenticate::Authenticate;
 use crate::errors::DbError;
-use crate::headers::{FlinchCnf, QueryResult};
+use crate::headers::{DbName, DbUser, FlinchCnf, FlinchError, QueryResult, SessionId};
 use crate::persistent::Persistent;
 use crate::query::Query;
-use crate::utils::{cnf_content, database_path, DBLIST_PREFIX, DBUSER_PREFIX, uuid};
-
-pub type DbName = String;
-pub type SessionId = String;
-pub type UserName = String;
-pub type Password = String;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DbUser {
-    pub db: Option<DbName>,
-    pub user: String,
-    pub pw: String,
-    pub create: bool,
-    pub drop: bool,
-    pub read: bool,
-    pub write: bool,
-    pub permit: bool,
-    pub flush: bool
-}
+use crate::utils::{cnf_content, database_path, DBLIST_PREFIX, DBUSER_PREFIX, ExecTime, uuid};
 
 pub struct Schemas {
     pub dbs: DashMap<DbName, Query>,
-    pub creds: DashMap<DbName, DashMap<UserName, DbUser>>,
-    pub sess: DashMap<SessionId, DbUser>,
+    auth: Authenticate,
     internal: Persistent,
-    config: FlinchCnf
+    config: FlinchCnf,
 }
 
 impl Schemas {
@@ -53,67 +35,163 @@ impl Schemas {
 
         let slf = Self {
             dbs: DashMap::new(),
-            creds: DashMap::new(),
-            sess: DashMap::new(),
+            auth: Authenticate::new(&db, &cnf),
             internal: Persistent::open(&db, "store"),
-            config: cnf
+            config: cnf,
         };
 
-        let docs = slf.internal.prefix(format!("{}",&DBLIST_PREFIX));
+        let docs = slf.internal.prefix(format!("{}", &DBLIST_PREFIX));
         for (_, db_name) in docs {
             slf.dbs.insert(db_name.to_owned(), Query::new_with_name(db_name.as_str()).await);
-        }
-
-        let users = slf.internal.prefix(format!("{}",&DBUSER_PREFIX));
-        for (_, user) in users {
-            let json = serde_json::from_str::<DbUser>(user.as_str());
-            if json.is_err() {
-                warn!("user info from persistent storage failed to parse {}", user);
-                continue;
-            }
-            let info = json.unwrap();
-            let db_name = info.db.as_ref().unwrap();
-            if let Some(creds) = slf.creds.get_mut(db_name.as_str()) {
-                let user_map = creds.value();
-                user_map.insert(info.user.to_owned(), info);
-            }
         }
 
         Ok(slf)
     }
 
-    /*pub async fn query(&self, stmt: &str) -> QueryResult {
+    pub fn login(&self, user: &str, pw: &str, db: &str) -> anyhow::Result<SessionId, DbError> {
+        self.auth.login(user, pw, db)
+    }
 
-    }*/
-
-    async fn new(&self, name: &str, permit: &str) -> anyhow::Result<()> {
-        if self.dbs.contains_key(&name.to_string()) {
-            return Err(anyhow!(DbError::DbExists(name.to_string())));
+    pub async fn flql(&self, stmt: &str, session_id: SessionId) -> QueryResult {
+        let ttk = ExecTime::new();
+        let user = self.auth.user(session_id.clone());
+        if user.is_none() {
+            return QueryResult {
+                data: vec![],
+                error: FlinchError::SchemaError(DbError::NoSession),
+                time_taken: ttk.done(),
+            };
         }
-        let permit = serde_json::from_str::<DbUser>(permit);
-        if permit.is_err() {
-            return Err(anyhow!(DbError::InvalidPermissionConfig));
+        let user = user.unwrap();
+
+        let parsed = flql::parse(stmt);
+        if parsed.is_err() {
+            return QueryResult {
+                data: vec![],
+                error: FlinchError::CustomError(parsed.err().unwrap()),
+                time_taken: ttk.done(),
+            };
         }
-        let db_name = name.to_string();
-        let mut permit = permit.unwrap();
-        permit.db = Some(db_name.to_owned());
 
-        let mut cred = DashMap::new();
-        cred.insert(permit.user.to_owned(), permit.to_owned());
+        let db = self.dbs.get(user.db.as_str());
+        if db.is_none() {
+            return QueryResult {
+                data: vec![],
+                error: FlinchError::SchemaError(DbError::DbNotExists(user.clone().db)),
+                time_taken: ttk.done(),
+            };
+        }
+        let db = db.unwrap();
+        let mut db = db.value();
 
-        self.creds.insert(db_name.to_owned(), cred);
-        self.internal.put_any(format!("{}{}",&DBUSER_PREFIX,uuid()), permit);
+        let parsed = parsed.unwrap();
+        match parsed {
+            Flql::DbNew(permit) => {
+                if user.db.ne("*") {
+                    return QueryResult {
+                        data: vec![],
+                        error: FlinchError::SchemaError(DbError::UserNoPermission),
+                        time_taken: ttk.done(),
+                    };
+                }
+                let permit = self.convert_permit(permit.as_str());
+                if permit.is_err() {
+                    return QueryResult {
+                        data: vec![],
+                        error: FlinchError::SchemaError(permit.err().unwrap()),
+                        time_taken: ttk.done(),
+                    };
+                }
+                let permit = permit.unwrap();
+
+                let res = self.new(permit).await;
+                QueryResult {
+                    data: vec![],
+                    error: match res {
+                        Ok(_) => FlinchError::None,
+                        Err(_) => FlinchError::SchemaError(res.err().unwrap()),
+                    },
+                    time_taken: ttk.done(),
+                }
+            }
+            Flql::DbDrop(db) => {
+                if user.db.ne("*") {
+                    return QueryResult {
+                        data: vec![],
+                        error: FlinchError::SchemaError(DbError::UserNoPermission),
+                        time_taken: ttk.done(),
+                    };
+                }
+                let res = self.drop(db.as_str()).await;
+                QueryResult {
+                    data: vec![],
+                    error: match res {
+                        Ok(_) => FlinchError::None,
+                        Err(_) => FlinchError::SchemaError(res.err().unwrap()),
+                    },
+                    time_taken: ttk.done(),
+                }
+            }
+            Flql::DbPerm(permit) => {
+                let res = self.new_user(permit.as_str());
+                QueryResult {
+                    data: vec![],
+                    error: match res {
+                        Ok(_) => FlinchError::None,
+                        Err(_) => FlinchError::SchemaError(res.err().unwrap()),
+                    },
+                    time_taken: ttk.done(),
+                }
+            }
+            _ => db.exec_with_flql(parsed).await
+        }
+    }
+
+    async fn new(&self, permit: DbUser) -> anyhow::Result<(), DbError> {
+        if self.dbs.contains_key(permit.name.as_str()) {
+            return Err(DbError::DbExists(permit.name.clone()));
+        }
+        let db_name = permit.db.to_owned();
 
         let query = Query::new_with_name(db_name.as_str()).await;
-        self.dbs.insert(db_name.to_owned(),query);
-        self.internal.put_any(uuid(), format!("{}{}",&DBLIST_PREFIX, db_name));
+
+        self.dbs.insert(db_name.to_owned(), query);
+        self.internal.put_any(uuid(), format!("{}{}", &DBLIST_PREFIX, db_name));
+        self._new_user(permit);
 
         Ok(())
     }
 
-    async fn drop(&self, name: &str) -> anyhow::Result<()> {
+    fn new_user(&self, permit: &str) -> anyhow::Result<(), DbError> {
+        let permit = self.convert_permit(permit);
+        if permit.is_err() {
+            return Err(permit.err().unwrap());
+        }
+        let permit = permit.unwrap();
+        if !self.dbs.contains_key(permit.db.as_str()) {
+            return Err(DbError::DbNotExists(permit.db));
+        }
+        self._new_user(permit);
+        Ok(())
+    }
+
+    fn _new_user(&self, permit: DbUser) {
+        self.auth.add_user_with_hash(permit.clone());
+        self.internal.put_any(format!("{}{}", &DBUSER_PREFIX, uuid()), permit);
+    }
+
+    fn convert_permit(&self, permit: &str) -> anyhow::Result<DbUser, DbError> {
+        let permit = serde_json::from_str::<DbUser>(permit);
+        if permit.is_err() {
+            return Err(DbError::InvalidPermissionConfig);
+        }
+        let permit = permit.unwrap();
+        Ok(permit)
+    }
+
+    async fn drop(&self, name: &str) -> anyhow::Result<(), DbError> {
         if !self.dbs.contains_key(&name.to_string()) {
-            return Err(anyhow!(DbError::DbNotExists(name.to_string())));
+            return Err(DbError::DbNotExists(name.to_string()));
         }
         let query = self.dbs.get(name).unwrap();
         let query = query.value();
@@ -123,14 +201,6 @@ impl Schemas {
             db.drop(col.as_str()).await.expect("collection to drop");
         }
         self.dbs.remove(name);
-        Ok(())
-    }
-
-    async fn permit(&self, name: &str, permit: &str) -> anyhow::Result<()> {
-        if !self.dbs.contains_key(&name.to_string()) {
-            return Err(anyhow!(DbError::DbNotExists(name.to_string())));
-        }
-
         Ok(())
     }
 }

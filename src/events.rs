@@ -14,7 +14,7 @@ pub struct Listener {
 
 #[derive(Default)]
 pub struct GlobalEvents {
-    pub listeners: HashMap<String, Vec<Listener>>
+    pub listeners: HashMap<String, Vec<Listener>>,
 }
 
 impl GlobalEvents {
@@ -39,7 +39,7 @@ impl GlobalEvents {
         let mut callback_handlers: Vec<thread::JoinHandle<()>> = Vec::new();
 
         if let Some(listeners) = self.listeners.get_mut(event) {
-            let bytes: Vec<u8> = bincode::encode_to_vec(&value,config::standard()).unwrap();
+            let bytes: Vec<u8> = bincode::encode_to_vec(&value, config::standard()).unwrap();
 
             let mut listeners_to_remove: Vec<usize> = Vec::new();
             for (index, listener) in listeners.iter_mut().enumerate() {
@@ -51,7 +51,7 @@ impl GlobalEvents {
                         callback_handlers.push(thread::spawn(move || {
                             callback(cloned_bytes);
                         }));
-                    },
+                    }
                     Some(limit) => {
                         if limit != 0 {
                             callback_handlers.push(thread::spawn(move || {
@@ -75,7 +75,7 @@ impl GlobalEvents {
 
     #[allow(dead_code)]
     pub fn remove_listener(&mut self, id_to_delete: &str) -> Option<String> {
-        for (_,event_listeners) in self.listeners.iter_mut() {
+        for (_, event_listeners) in self.listeners.iter_mut() {
             if let Some(index) = event_listeners.iter().position(|listener| listener.id == id_to_delete) {
                 event_listeners.remove(index);
                 return Some(id_to_delete.to_string());
@@ -92,7 +92,7 @@ impl GlobalEvents {
     {
         let id = Uuid::new_v4().to_string();
         let parsed_callback = move |bytes: Vec<u8>| {
-            let value: T = bincode::decode_from_slice(&bytes,config::standard()).unwrap().0;
+            let value: T = bincode::decode_from_slice(&bytes, config::standard()).unwrap().0;
             callback(value);
         };
 
@@ -103,7 +103,7 @@ impl GlobalEvents {
         };
 
         match self.listeners.get_mut(event) {
-            Some(callbacks) => { callbacks.push(listener); },
+            Some(callbacks) => { callbacks.push(listener); }
             None => { self.listeners.insert(event.to_string(), vec![listener]); }
         }
 

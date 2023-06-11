@@ -61,7 +61,7 @@ impl<K> Range<K>
 
     pub fn delete<D>(&self, k: &K, d: &D) where D: Document {
         trace!("deleting range for key - {}",&k);
-        d.fields().into_iter().for_each(|f|{
+        d.fields().into_iter().for_each(|f| {
             if let Some(mut tree) = self.tree.get_mut(&f.key) {
                 if let Some(set) = tree.value_mut().get_mut(&f.value) {
                     set.insert(k.clone());

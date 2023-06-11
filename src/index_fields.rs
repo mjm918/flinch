@@ -13,7 +13,7 @@ use tokio::task::JoinHandle;
 use crate::utils::tokenize;
 
 pub struct InvertedIndex<K> {
-    pub kv: Arc<DashMap<String, DashSet<K>>>
+    pub kv: Arc<DashMap<String, DashSet<K>>>,
 }
 
 impl<K> InvertedIndex<K>
@@ -96,18 +96,18 @@ impl<K> InvertedIndex<K>
 
     pub fn w_find(&self, words: Vec<&str>) -> Vec<K> {
         let res = DashSet::new();
-        self.kv.par_iter().for_each(|rkv|{
+        self.kv.par_iter().for_each(|rkv| {
             let kv = rkv.pair();
             let key = kv.0;
             let counter = Arc::new(Mutex::new(0));
-            words.par_iter().for_each(|word|{
+            words.par_iter().for_each(|word| {
                 let mut c = counter.lock().unwrap();
                 let token = word.to_lowercase();
                 if key.contains(token.as_str()) {
                     *c += 1;
                 }
                 if *c >= words.len() {
-                    let dk = kv.1.iter().map(|r|r.key().to_owned()).collect::<Vec<K>>();
+                    let dk = kv.1.iter().map(|r| r.key().to_owned()).collect::<Vec<K>>();
                     for k in dk {
                         if res.get(&k).is_none() {
                             res.insert(k);

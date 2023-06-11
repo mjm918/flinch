@@ -16,7 +16,7 @@ pub enum DocumentError {
     #[error("invalid document provided. must be a key-value pair")]
     NotAnObject,
     #[error("error parsing document")]
-    DocumentParseError
+    DocumentParseError,
 }
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
@@ -34,7 +34,7 @@ pub enum CollectionError {
     #[error("no such collection")]
     NoSuchCollection,
     #[error("collection options are not valid")]
-    OptionsProvidedAreNotValid
+    OptionsProvidedAreNotValid,
 }
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
@@ -58,11 +58,11 @@ pub enum QueryError {
     #[error("direct object or array of objects currently not supported")]
     DirectObjOrArrayOfObj,
     #[error("operator `{0}` not supported for data type `{1}`")]
-    OperatorNotAllowed(String,String),
+    OperatorNotAllowed(String, String),
     #[error("unknown operator compare")]
     UnknownOperatorCompare,
     #[error("no result found")]
-    NoResult
+    NoResult,
 }
 
 #[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
@@ -76,13 +76,17 @@ pub enum DbError {
     #[error("invalid permission config provided")]
     InvalidPermissionConfig,
     #[error("error parsing config file")]
-    ErrorParsingConfig
-}
-
-#[derive(Serialize, Deserialize, Error, Clone, Debug, PartialEq)]
-pub enum SchemaError {
+    ErrorParsingConfig,
+    #[error("user permission `{0}` is malformed")]
+    UserPermissionNotValid(String),
+    #[error("database name cannot be empty")]
+    DbMandatory,
     #[error("no such user `{0}`")]
     NoSuchUser(String),
     #[error("auth failed. no session found")]
-    NoSession
+    NoSession,
+    #[error("invalid password")]
+    InvalidPassword,
+    #[error("user does not permission")]
+    UserNoPermission,
 }

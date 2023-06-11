@@ -11,20 +11,20 @@ use crate::events::EVENT_EMITTER;
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
 pub struct Entry {
     pub key: String,
-    pub reg_at: i64
+    pub reg_at: i64,
 }
 
 #[derive(Clone)]
 pub struct Ttl {
     kv: DashMap<i64, Entry>,
-    watching: String
+    watching: String,
 }
 
 impl Ttl {
     pub fn new(name: &str) -> Self {
         Self {
             kv: DashMap::new(),
-            watching: format!("{}",name)
+            watching: format!("{}", name),
         }
     }
 
@@ -51,26 +51,26 @@ impl Ttl {
     fn purge(&self) {
         let now = chrono::Local::now().timestamp();
         trace!("todo check {} keys",self.kv.len());
-        let keys = self.kv.iter().filter(|kv|{
+        let keys = self.kv.iter().filter(|kv| {
             let key = kv.key();
             key.cmp(&now).is_le()
-        }).map(|kv|kv.key().to_owned()).collect::<Vec<i64>>();
+        }).map(|kv| kv.key().to_owned()).collect::<Vec<i64>>();
         trace!("TTL found {} keys",keys.len());
         for key in keys {
             let removed = self.kv.get(&key);
             if let Some(kv) = removed {
-                EVENT_EMITTER.lock().unwrap().emit("expired",kv.value().to_owned());
+                EVENT_EMITTER.lock().unwrap().emit("expired", kv.value().to_owned());
             }
         }
     }
 
     pub fn remove(&self, key: String) {
         let tm = self.kv.par_iter()
-            .find_any(|kv|{
+            .find_any(|kv| {
                 let entry = kv.value();
                 entry.key.eq(&key)
             })
-            .map(|kv|{
+            .map(|kv| {
                 let key = kv.key();
                 let entry = kv.value();
                 (key.to_owned(), entry.to_owned())

@@ -7,7 +7,7 @@ use crate::pub_sub::PubSub;
 
 pub struct Watchman<M> {
     idx: usize,
-    chans: Vec<Sender<M>>
+    chans: Vec<Sender<M>>,
 }
 
 impl<M> Watchman<M> where M: Clone + Send + 'static {
@@ -15,7 +15,7 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
         if let Err(err) = Self::multi_chk(&chans) {
             return Err(err);
         }
-        Ok(Self{
+        Ok(Self {
             idx: 0,
             chans,
         })
@@ -38,7 +38,7 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
     async fn recv(&mut self, res: Option<Request<M>>) -> WatcherState {
         match res {
             Some(req) => {
-                match req  {
+                match req {
                     Request::Register(sender) => {
                         match self.chk(&sender) {
                             Ok(_) => {
@@ -46,10 +46,9 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
                                 WatcherState::Continue
                             }
                             Err(_) => {
-                                return WatcherState::Continue
+                                return WatcherState::Continue;
                             }
                         }
-
                     }
                     Request::Dispatch(msg) => {
                         let _ = self.notify(msg).await;
@@ -90,7 +89,7 @@ impl<M> Watchman<M> where M: Clone + Send + 'static {
             self.idx = 0;
             index = 0;
         }
-        return index
+        return index;
     }
 
     fn multi_chk(chans: &Vec<Sender<M>>) -> Result<(), WatcherError> {
