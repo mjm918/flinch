@@ -6,7 +6,7 @@ use flql::Flql;
 
 use crate::authenticate::Authenticate;
 use crate::errors::DbError;
-use crate::headers::{DbName, DbUser, FlinchCnf, FlinchError, QueryResult, SessionId};
+use crate::headers::{DbName, DbUser, FlinchCnf, FlinchError, PermissionTypes, QueryResult, SessionId};
 use crate::persistent::Persistent;
 use crate::query::Query;
 use crate::utils::{cnf_content, database_path, DBLIST_PREFIX, DBUSER_PREFIX, ExecTime, uuid};
@@ -85,15 +85,43 @@ impl Schemas {
         let mut db = db.value();
 
         let parsed = parsed.unwrap();
+        let permitted = match parsed {
+            Flql::DbNew(_) => user.db.eq("*"),
+            Flql::DbPerm(_) => self.auth.chk_permission(session_id,PermissionTypes::AssignUser),
+            Flql::DbDrop(_) => user.db.eq("*"),
+            Flql::New(_) => self.auth.chk_permission(session_id,PermissionTypes::CreateCollection),
+            Flql::Drop(_) => self.auth.chk_permission(session_id,PermissionTypes::DropCollection),
+            Flql::DropUser(_, _) => self.auth.chk_permission(session_id,PermissionTypes::AssignUser),
+            Flql::Exists(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::Length(_) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::Flush(_) => self.auth.chk_permission(session_id,PermissionTypes::Flush),
+            Flql::Ttl(_, _, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::Put(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::PutWhen(_, _, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::PutPointer(_, _, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::SearchTyping(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::Get(_, _, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::GetWhen(_, _, _, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::GetPointer(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::GetView(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::GetClip(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::GetIndex(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::GetRange(_, _, _, _) => self.auth.chk_permission(session_id,PermissionTypes::Read),
+            Flql::Delete(_) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::DeleteWhen(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::DeletePointer(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::DeleteClip(_, _) => self.auth.chk_permission(session_id,PermissionTypes::Write),
+            Flql::None => false
+        };
+        if !permitted {
+            return QueryResult {
+                data: vec![],
+                error: FlinchError::SchemaError(DbError::UserNoPermission),
+                time_taken: ttk.done(),
+            };
+        }
         match parsed {
             Flql::DbNew(permit) => {
-                if user.db.ne("*") {
-                    return QueryResult {
-                        data: vec![],
-                        error: FlinchError::SchemaError(DbError::UserNoPermission),
-                        time_taken: ttk.done(),
-                    };
-                }
                 let permit = self.convert_permit(permit.as_str());
                 if permit.is_err() {
                     return QueryResult {
@@ -115,13 +143,6 @@ impl Schemas {
                 }
             }
             Flql::DbDrop(db) => {
-                if user.db.ne("*") {
-                    return QueryResult {
-                        data: vec![],
-                        error: FlinchError::SchemaError(DbError::UserNoPermission),
-                        time_taken: ttk.done(),
-                    };
-                }
                 let res = self.drop(db.as_str()).await;
                 QueryResult {
                     data: vec![],
