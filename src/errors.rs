@@ -89,4 +89,10 @@ pub enum DbError {
     InvalidPassword,
     #[error("user does not permission")]
     UserNoPermission,
+    #[error("naming convention for `{0}` rejected. char length must be in between `{1}`-`{2}`")]
+    InvalidNamingConventionLen(String, String, String),
+    #[error("minimum password length required: `{0}` characters")]
+    MinPwLen(String),
+    #[error("database name malformed")]
+    DbNameMalformed,
 }

@@ -32,6 +32,17 @@ impl Persistent {
             .expect(format!("inserting {} into local storage", &k).as_str());
     }
 
+    pub fn remove_by_prefix(&self, prefix: String) -> Vec<sled::Result<Option<IVec>>> {
+        let mut res = vec![];
+        let prefix_data = self.prefix(prefix);
+        for (key, _) in prefix_data {
+            res.push(
+                self.remove(key)
+            );
+        }
+        res
+    }
+
     pub fn remove(&self, k: String) -> sled::Result<Option<IVec>> {
         trace!("{} - key removed from storage",&k);
         self.tree.remove(k)

@@ -107,17 +107,26 @@ pub struct QueryResult {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FlinchCnf {
-    pub root: String,
-    pub pw: String,
-    pub data_dir: String,
+    pub login: FlinchCnfLogin,
+    pub dir: FlinchCnfDir,
+    pub enable: FlinchCnfEnable,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub enum PermissionTypes {
-    AssignUser,
-    CreateCollection,
-    DropCollection,
-    Read,
-    Write,
-    Flush,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FlinchCnfLogin {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FlinchCnfDir {
+    pub data: String,
+    pub log: String,
+    pub mem_watch: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FlinchCnfEnable {
+    pub log: bool,
+    pub mem_watch: bool,
 }

@@ -5,9 +5,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::anyhow;
 use log::error;
+use regex::Regex;
 use uuid::Uuid;
 
-use crate::headers::{FlinchCnf, Sort, SortDirection};
+use crate::headers::{FlinchCnf, FlinchCnfDir, FlinchCnfEnable, FlinchCnfLogin, Sort, SortDirection};
+use crate::pri_headers::FLINCH;
 
 pub struct ExecTime {
     timer: Instant,
@@ -37,7 +39,9 @@ pub fn database_path(name: Option<String>) -> String {
         let name = name.unwrap();
         db_name = name.to_owned();
     }
+    let cnf = cnf_content().unwrap();
     Path::new(".")
+        .join(cnf.dir.data)
         .join(db_name)
         .to_str()
         .unwrap()
@@ -134,10 +138,19 @@ pub fn cnf_content() -> anyhow::Result<FlinchCnf> {
             .append(true)
             .open(path.as_str())
             .unwrap();
+
+        // write default config
+        let login = FlinchCnfLogin { username: "root".to_string(), password: "flinch".to_string() };
+        let enable = FlinchCnfEnable { log: true, mem_watch: true };
+        let dir = FlinchCnfDir {
+            data: "data".to_string(),
+            log: "log".to_string(),
+            mem_watch: "etc".to_string(),
+        };
         let cnf = FlinchCnf {
-            root: "root".to_string(),
-            pw: "flinch".to_string(),
-            data_dir: ".".to_string(),
+            login,
+            dir,
+            enable,
         };
         let cnf = toml::to_string(&cnf);
         if cnf.is_err() {
@@ -165,4 +178,28 @@ pub fn cnf_content() -> anyhow::Result<FlinchCnf> {
 
 pub fn uuid() -> String {
     Uuid::new_v4().as_hyphenated().to_string()
+}
+
+pub fn db_name_ok(name: &str) -> bool {
+    if name.eq(FLINCH) {
+        return false;
+    }
+    let windows_regex = Regex::new(r#"(?i)[\x00-\x1F\x7F<>:"/\\|?*]|[.]$|^ $|^\.|\.$|^(\.|\s)*$"#).unwrap();
+    let linux_regex = Regex::new(r#"/$|^\.|\.$|^(\.|\s)*$"#).unwrap();
+
+    !windows_regex.is_match(name) && !linux_regex.is_match(name)
+}
+
+pub fn get_log_filename() -> String {
+    let date = chrono::Local::now();
+    format!("{}{}.log", FLINCH, date.format("%Y%m%d_%H%M%S").to_string())
+}
+
+pub fn make_log_path(path: &str) -> String {
+    Path::new(".")
+        .join(path)
+        .join(get_log_filename())
+        .to_str()
+        .unwrap()
+        .to_lowercase()
 }

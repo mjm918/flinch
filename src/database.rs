@@ -1,27 +1,19 @@
-#![feature(integer_atomics, const_fn_trait_bound)]
-
-use std::alloc::System;
 use std::sync::Arc;
 
 use anyhow::Result;
 use dashmap::DashMap;
 use dashmap::mapref::one::Ref;
-use log::{error, info, trace, warn};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
-use simple_logger::SimpleLogger;
-use size::{Base, Size};
 use sled::Db;
 
 use crate::collection::Collection;
 use crate::doc_trait::{Document, ViewConfig};
 use crate::errors::CollectionError;
 use crate::persistent::Persistent;
+use crate::pri_headers::INTERNAL_COL;
 use crate::utils::{COL_PREFIX, database_path, get_col_name, prefix_col_name};
-use crate::zalloc::Zalloc;
-
-#[global_allocator]
-static ALLOCMEASURE: Zalloc<System> = Zalloc::new(System);
 
 /// `CollectionOptions` is used while creating a collection
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -39,6 +31,7 @@ pub struct Database<D> where D: Document + 'static {
     storage: Arc<DashMap<String, Arc<Collection<D>>>>,
     persist: Db,
     internal_tree: Persistent,
+    db_path: String,
 }
 
 impl<D> Database<D>
@@ -59,22 +52,11 @@ impl<D> Database<D>
     }
 
     async fn boot(name: Option<String>) -> Self {
-        // Reset allocation count
-        ALLOCMEASURE.reset();
-        // Set database logger
-        let logger = SimpleLogger::new()
-            .with_module_level("sled", log::LevelFilter::Info)
-            .with_colors(true)
-            .with_level(log::LevelFilter::Debug)
-            .init();
-        if logger.is_ok() {
-            logger.unwrap();
-        } else {
-            error!("{:?}",logger.err().unwrap());
-        }
         let storage = DashMap::new();
-        let persist = sled::open(database_path(name)).unwrap();
-        let internal_tree = Persistent::open(&persist, "__flinch_internal");
+        let db_path = database_path(name);
+        let persist = sled::open(db_path.as_str()).unwrap();
+
+        let internal_tree = Persistent::open(&persist, INTERNAL_COL);
 
         let existing = internal_tree.prefix(format!("{}", COL_PREFIX));
         for exi in existing {
@@ -94,19 +76,9 @@ impl<D> Database<D>
             storage: Arc::new(storage),
             persist,
             internal_tree,
+            db_path,
         };
-        instance.watch_memory();
         instance
-    }
-
-    /// watch current memory usage
-    fn watch_memory(&self) {
-        std::thread::spawn(move || {
-            loop {
-                trace!("memory used: {}", Size::from_bytes(ALLOCMEASURE.get()).format().with_base(Base::Base10));
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
-        });
     }
 
     /// `ls` list out all the collections in the database
@@ -139,12 +111,14 @@ impl<D> Database<D>
 
     /// `drop` drops a collection by `name`
     pub async fn drop(&self, name: &str) -> Result<(), CollectionError> {
-        if let Err(err) = self.exi(name) {
-            return Err(err);
+        if let None = self.storage.get(name) {
+            return Err(CollectionError::NoSuchCollection);
         }
-        let col = self.using(name);
-        let col = col.unwrap();
-        col.value().empty().await;
+        {
+            let col = self.using(name);
+            let col = col.unwrap();
+            col.value().empty().await;
+        }
         self.storage.remove(name);
         self.internal_tree.remove(prefix_col_name(name)).expect("remove from local storage");
         self.persist.drop_tree(name).expect("drop collection from local storage");
@@ -152,6 +126,10 @@ impl<D> Database<D>
         warn!("collection - {} dropped",name);
 
         Ok(())
+    }
+
+    pub fn delete_disk_dir(&self) -> std::io::Result<()> {
+        std::fs::remove_dir_all(self.db_path.as_str())
     }
 
     fn exi(&self, name: &str) -> Result<(), CollectionError> {

@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::time::Instant;
 
 use crossbeam_queue::SegQueue;
 use flql::Flql;
