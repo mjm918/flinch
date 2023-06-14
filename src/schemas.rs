@@ -10,10 +10,12 @@ use log::{error, LevelFilter, trace};
 use simplelog::{ColorChoice, CombinedLogger, Config, TerminalMode, TermLogger, WriteLogger};
 use size::{Base, Size};
 use sled::Db;
+use tokio::sync::mpsc::Sender;
 
 use crate::authenticate::Authenticate;
+use crate::doc::QueryBased;
 use crate::errors::DbError;
-use crate::headers::{DbName, DbUser, FlinchCnf, FlinchError, QueryResult, SessionId};
+use crate::headers::{DbName, DbUser, FlinchCnf, FlinchError, PubSubEvent, QueryResult, SessionId};
 use crate::persistent::Persistent;
 use crate::pri_headers::{FLINCH, INTERNAL_TREE, MAGIC_DB, MAX_DBNAME_LEN, MAX_USERNAME_LEN, MIN_DBNAME_LEN, MIN_PW_LEN, MIN_USERNAME_LEN, PermissionTypes};
 use crate::query::Query;
@@ -52,7 +54,7 @@ impl Schemas {
             CombinedLogger::init(
                 vec![
                     TermLogger::new(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-                    WriteLogger::new(LevelFilter::Error, Config::default(), writer),
+                    WriteLogger::new(LevelFilter::Warn, Config::default(), writer),
                 ]
             ).unwrap();
         }
@@ -316,6 +318,39 @@ impl Schemas {
         self.dbs.remove(name);
         self.auth.drop_by_db(name);
 
+        Ok(())
+    }
+
+    pub async fn subscribe(&self, session_id: SessionId, collection_name: &str, sx:  Sender<PubSubEvent<String, QueryBased>>) -> anyhow::Result<(), QueryResult> {
+        let ttk = ExecTime::new();
+        let user = self.auth.user(session_id.clone());
+        if user.is_none() {
+            return Err(QueryResult {
+                data: vec![],
+                error: FlinchError::SchemaError(DbError::NoSession),
+                time_taken: ttk.done(),
+            });
+        }
+        let user = user.unwrap();
+
+        let db = self.dbs.get(trim_apos(&user.db).as_str());
+        if db.is_none() {
+            return Err(QueryResult {
+                data: vec![],
+                error: FlinchError::SchemaError(DbError::DbNotExists(user.clone().db)),
+                time_taken: ttk.done(),
+            });
+        }
+        let db = db.unwrap();
+        let db = db.value();
+        let res = db.subscribe(collection_name,sx).await;
+        if res.is_err() {
+            return Err(QueryResult {
+                data: vec![],
+                error: res.err().unwrap(),
+                time_taken: ttk.done(),
+            });
+        }
         Ok(())
     }
 }

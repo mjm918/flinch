@@ -2,9 +2,11 @@
 mod tests {
     use serde::{Serialize, Deserialize};
     use std::path::Path;
+    use std::sync::Arc;
     use flinch::database::CollectionOptions;
+    use flinch::doc::QueryBased;
     use flinch::doc_trait::ViewConfig;
-    use flinch::headers::{DbUser, FlinchError};
+    use flinch::headers::{DbUser, FlinchError, NotificationType, PubSubEvent};
     use flinch::schemas::Schemas;
 
     const COLLECTION: &str = "demo";
@@ -16,13 +18,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test() {
+    async fn schema() {
         let _ = std::fs::remove_dir_all(Path::new(".").join("data").as_path());
 
         let schema = Schemas::init().await;
         assert!(schema.is_ok());
 
-        let schema = schema.unwrap();
+        let schema = Arc::new(schema.unwrap());
 
         let login = schema.login("root","flinch","*");
         assert!(login.is_ok(), "{}", login.err().unwrap());
@@ -95,6 +97,31 @@ mod tests {
         let options = serde_json::to_string(&col_opts).unwrap();
         let col_created = schema.flql(format!("new({});",options.as_str()).as_str(),session_id.clone()).await;
         assert!(col_created.error.eq(&FlinchError::None),"{:?}",col_created);
+
+        let schm = Arc::clone(&schema);
+        let (sx, mut rx) = tokio::sync::mpsc::channel(300);
+        let sid = session_id.clone();
+        let _ = tokio::task::spawn(async move {
+            let _ = schm.subscribe(sid,COLLECTION,sx).await;
+            let mut i = 0;
+            while let Some(ev) = rx.recv().await {
+                match ev {
+                    PubSubEvent::Data(d) => {
+                        match d {
+                            NotificationType::Insert(k, _v) => {
+                                println!("{:?}",k);
+                            }
+                            NotificationType::Remove(_) => {}
+                        }
+                    }
+                    PubSubEvent::Subscribed(_) => {}
+                }
+                i += 1;
+                if i == 10 {
+                    break;
+                }
+            }
+        });
 
         let record_size = 7402;
         for k in 0..record_size {

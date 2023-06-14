@@ -1,6 +1,6 @@
 [package]
 name = "flinch"
-version = "0.1.64"
+version = "0.1.65"
 edition = "2021"
 authors = ["Mohammad Julfikar <julfikar@eztech.com.my>", "Mohammad Julfikar <md.julfikar.mahmud@gmail.com>"]
 categories = ["parser-implementations","caching","database-implementations"]

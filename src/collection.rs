@@ -163,7 +163,7 @@ impl<D> Collection<D>
         }
 
         let query = NotificationType::Insert(k.to_string(), v);
-        let _ = self.watchman.notify(PubSubEvent::Data(query));
+        let _ = self.watchman.notify(PubSubEvent::Data(query)).await;
 
         Ok(exec.done())
     }

@@ -40,11 +40,11 @@ mod tests {
         let instance = instance.unwrap();
         let collection = instance.value();
 
-        /*let (sx, mut rx) = tokio::sync::mpsc::channel(30000);
-        collection.sub(sx).await.expect("subscribe to channel");*/
+        let (sx, mut rx) = tokio::sync::mpsc::channel(30000);
+        collection.sub(sx).await.expect("subscribe to channel");
 
         let insert = Instant::now();
-        let record_size = 1000;
+        let record_size = 7000;
         for k in 0..record_size {
             let v = serde_json::to_string(
                 &User {
@@ -96,16 +96,16 @@ mod tests {
         collection.empty().await;
         assert_eq!(collection.len(),0,"after::drop");
 
-        /*let mut i = 0;
+        let mut i = 0;
         loop {
             let event = rx.recv().await.unwrap();
             match event {
                 PubSubEvent::Data(d) => {
                     match d {
-                        ActionType::Insert(k, _v) => {
+                        NotificationType::Insert(k, _v) => {
                             println!("inserted :pub/sub: {}",k);
                         }
-                        ActionType::Remove(k) => {
+                        NotificationType::Remove(k) => {
                             println!("removed :: {}",k);
                         }
                     };
@@ -118,6 +118,6 @@ mod tests {
             if i == 10 { // for demo, listen till 10 message only
                 break;
             }
-        }*/
+        }
     }
 }
