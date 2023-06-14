@@ -2,3 +2,5 @@
 /Cargo.lock
 /dbs/**
 flinch.toml
+**.log
+/data
