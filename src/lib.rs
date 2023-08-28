@@ -1,6 +1,5 @@
 mod authenticate;
 mod clips;
-mod errors;
 mod events;
 mod index_fields;
 mod index_hash;
@@ -21,4 +20,4 @@ pub mod doc;
 pub mod headers;
 pub mod query;
 pub mod schemas;
-
+pub mod errors;
