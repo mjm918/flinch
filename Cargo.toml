@@ -1,6 +1,6 @@
 [package]
 name = "flinch"
-version = "0.1.66"
+version = "0.1.67"
 edition = "2021"
 authors = ["Mohammad Julfikar <julfikar@eztech.com.my>", "Mohammad Julfikar <md.julfikar.mahmud@gmail.com>"]
 categories = ["parser-implementations","caching","database-implementations"]
@@ -16,6 +16,7 @@ repository = "https://github.com/mjm918/flinch"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.73"
 anyhow = "1.0.70"
 bincode = "2.0.0-rc.3"
 chrono = "0.4.24"

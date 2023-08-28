@@ -21,3 +21,4 @@ pub mod headers;
 pub mod query;
 pub mod schemas;
 pub mod errors;
+pub mod extension;
